@@ -61,7 +61,8 @@ def test_models_creation(db_session):
 
     saved_agent = db_session.query(Agent).filter_by(name="Test Bot").first()
     assert saved_agent.id is not None
-    assert saved_agent.api_key.startswith("aa_live_")
+    assert saved_agent.client_id.startswith("aa_client_")
+    assert saved_agent.client_secret.startswith("aa_secret_")
     assert saved_agent.is_frozen is False
 
     integration = Integration(name="gemini", provider_key="dummy_key")
@@ -110,3 +111,93 @@ def test_gemini_adapter_error(mock_post):
     assert response["status"] == "error"
     assert response["code"] == 400
     assert response["message"] == "Bad Request"
+
+
+def test_security_utils():
+    from agentauth.core.security import (
+        decrypt_secret,
+        encrypt_secret,
+        get_password_hash,
+        verify_password,
+    )
+
+    # Test empty values
+    assert encrypt_secret("") == ""
+    assert decrypt_secret("") == ""
+
+    # Test valid flow
+    plain = "secret123"
+    enc = encrypt_secret(plain)
+    assert enc != plain
+    assert decrypt_secret(enc) == plain
+
+    # Test invalid decryption fallback
+    assert decrypt_secret("invalid-base64-or-wrong-format") == "invalid-base64-or-wrong-format"
+
+    # Test password hashing
+    pw = "mypassword"
+    hashed = get_password_hash(pw)
+    assert verify_password(pw, hashed) is True
+    assert verify_password("wrong", hashed) is False
+
+
+def test_security_access_token():
+    from datetime import timedelta
+
+    from agentauth.core.security import create_access_token, decode_access_token
+
+    data = {"sub": "admin"}
+    # Default expiry
+    token = create_access_token(data)
+    decoded = decode_access_token(token)
+    assert decoded["sub"] == "admin"
+
+    # Custom expiry
+    token2 = create_access_token(data, expires_delta=timedelta(minutes=5))
+    decoded2 = decode_access_token(token2)
+    assert decoded2["sub"] == "admin"
+
+
+def test_security_key_generation():
+    from pathlib import Path
+
+    key_file = Path(".agentauth_master.key")
+    # If it exists, back it up
+    backup = None
+    if key_file.exists():
+        backup = key_file.read_bytes()
+        key_file.unlink()
+
+    try:
+        # Import fresh to trigger generation
+        import importlib
+
+        import agentauth.core.security
+
+        importlib.reload(agentauth.core.security)
+
+        assert key_file.exists()
+    finally:
+        if backup:
+            key_file.write_bytes(backup)
+
+
+def test_security_master_key_env():
+    import importlib
+    import os
+    from unittest.mock import patch
+
+    from cryptography.fernet import Fernet
+
+    import agentauth.core.security
+
+    custom_key = Fernet.generate_key().decode()
+    with patch.dict(os.environ, {"AGENTAUTH_MASTER_KEY": custom_key}):
+        # Reload to trigger the env check
+        importlib.reload(agentauth.core.security)
+        # Verify it uses the key from env
+        from agentauth.core.security import decrypt_secret, encrypt_secret
+
+        plain = "hello"
+        enc = encrypt_secret(plain)
+        assert decrypt_secret(enc) == "hello"

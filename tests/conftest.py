@@ -3,7 +3,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from agentauth.core.database import Base, get_db
+from agentauth.core.database import get_db
+from agentauth.core.models import Base
 from agentauth.main import app
 
 # Use an in-memory SQLite database for testing
@@ -60,6 +61,7 @@ def mock_db_sessions(monkeypatch, db_session):
     db_session.close = lambda: None
 
     monkeypatch.setattr("agentauth.dashboard.app.SessionLocal", MockSessionLocal())
+    monkeypatch.setattr("agentauth.dashboard.auth_ui.SessionLocal", MockSessionLocal())
     monkeypatch.setattr("agentauth.api.router.SessionLocal", MockSessionLocal())
     monkeypatch.setattr("agentauth.core.database.SessionLocal", MockSessionLocal())
 

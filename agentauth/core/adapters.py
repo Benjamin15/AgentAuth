@@ -1,6 +1,6 @@
 import time
 from abc import ABC, abstractmethod
-from typing import Any, cast
+from typing import Any
 
 
 class BaseAdapter(ABC):
@@ -24,10 +24,18 @@ class MockAdapter(BaseAdapter):
     async def forward(self, request_data: dict[str, Any]) -> dict[str, Any]:
         # Simulate network latency
         time.sleep(0.3)
+        import random
+
         return {
             "status": "success",
+            "model_name": "mock",
             "message": "This is a simulated response from the downstream service.",
             "echoed_data": request_data,
+            "usage": {
+                "prompt": random.randint(10, 100),
+                "completion": random.randint(5, 50),
+                "total": 0,  # calculated later if needed
+            },
         }
 
 
@@ -50,4 +58,15 @@ class GeminiAdapter(BaseAdapter):
         if response.status_code != 200:
             return {"status": "error", "code": response.status_code, "message": response.text}
 
-        return cast(dict[str, Any], response.json())
+        data = response.json()
+        usage = data.get("usageMetadata", {})
+
+        return {
+            "data": data,
+            "model_name": self.model,
+            "usage": {
+                "prompt": usage.get("promptTokenCount"),
+                "completion": usage.get("candidatesTokenCount"),
+                "total": usage.get("totalTokenCount"),
+            },
+        }

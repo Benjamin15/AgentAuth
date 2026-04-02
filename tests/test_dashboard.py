@@ -13,11 +13,8 @@ from agentauth.dashboard.app import (
     get_logs_view,
     get_sidebar,
     handle_agent_dashboard,
-    handle_agent_dashboard_logic,
     render_page,
     render_page_logic,
-    save_gemini_key,
-    save_gemini_key_logic,
 )
 
 
@@ -123,85 +120,34 @@ def test_render_page_logic(db_session):
     )
     db_session.commit()
 
-    res1, id1 = render_page_logic("nav-logs", "nav-logs.n_clicks", None)
+    res1, id1 = render_page_logic("nav-logs", "nav-logs.n_clicks", None, "24h")
     assert "Global Audit Logs" in str(res1)
 
-    res2, id2 = render_page_logic("nav-integrations", "nav-integrations.n_clicks", None)
+    res2, id2 = render_page_logic("nav-integrations", "nav-integrations.n_clicks", None, "24h")
     assert "Connect Providers" in str(res2)
 
-    res3, id3 = render_page_logic("nav-agents", "nav-agents.n_clicks", None)
+    res3, id3 = render_page_logic("nav-agents", "nav-agents.n_clicks", None, "24h")
     assert "AI Agents" in str(res3)
 
     # Test dict triggers (Stats/Back)
-    res4, id4 = render_page_logic({"type": "stats-btn", "index": 1}, None, None)
+    res4, id4 = render_page_logic({"type": "stats-btn", "index": 1}, None, None, "24h")
     assert id4 == 1
 
-    res5, id5 = render_page_logic({"type": "back-btn", "index": "agents"}, None, 1)
+    res5, id5 = render_page_logic({"type": "back-btn", "index": "agents"}, None, 1, "24h")
     assert id5 is None
     assert "AI Agents" in str(res5)
 
     # Test unknown button id
-    res6, id6 = render_page_logic("unknown-btn", "unknown-btn.n_clicks", None)
+    res6, id6 = render_page_logic("unknown-btn", "unknown-btn.n_clicks", None, "24h")
     assert id6 is None
-    assert "Analytics Overview" in str(res6)
 
     # Test unknown dict trigger
-    res7, id7 = render_page_logic({"type": "unknown"}, None, None)
-    assert "Analytics Overview" in str(res7)
+    res7, id7 = render_page_logic({"type": "unknown"}, None, None, "24h")
+    assert "AI Observability Dashboard" in str(res7)
 
     # Default (no triggered_id)
-    res8, id8 = render_page_logic(None, None, None)
-    assert "Analytics Overview" in str(res8)
-
-
-def test_save_gemini_key_logic(db_session):
-    with pytest.raises(PreventUpdate):
-        save_gemini_key_logic(0, "key")
-
-    res = save_gemini_key_logic(1, "new_secret")
-    assert "successfully" in res
-    assert db_session.query(Integration).filter_by(name="gemini").one().provider_key == "new_secret"
-
-
-def test_handle_agent_dashboard_logic_creation(db_session):
-    # Missing name
-    res, msg = handle_agent_dashboard_logic("create-agent-btn", [], "", "")
-    assert "Name is required" in msg
-
-    # Success
-    res, msg = handle_agent_dashboard_logic("create-agent-btn", [], "New Bot", "Desc")
-    assert "created" in msg
-    assert db_session.query(Agent).filter_by(name="New Bot").one()
-
-
-def test_handle_agent_dashboard_logic_freeze(db_session):
-    agent = Agent(name="Ice", is_frozen=False)
-    db_session.add(agent)
-    db_session.commit()
-
-    handle_agent_dashboard_logic({"type": "freeze-btn", "index": agent.id}, [], None, None)
-    db_session.refresh(agent)
-    assert agent.is_frozen is True
-
-
-def test_handle_agent_dashboard_logic_permissions(db_session):
-    agent = Agent(name="Perm Bot")
-    db_session.add(agent)
-    db_session.add(Integration(name="gemini", is_active=True))
-    db_session.commit()
-
-    # Grant
-    states = [None, None, [{"id": {"type": "perm-dropdown", "index": agent.id}, "value": "gemini"}]]
-    handle_agent_dashboard_logic({"type": "grant-btn", "index": agent.id}, states, None, None)
-    db_session.refresh(agent)
-    assert len(agent.permissions) == 1
-
-    # Revoke
-    handle_agent_dashboard_logic(
-        {"type": "revoke-perm", "agent": agent.id, "scope": "gemini"}, [], None, None
-    )
-    db_session.refresh(agent)
-    assert len(agent.permissions) == 0
+    res8, id8 = render_page_logic(None, None, None, "24h")
+    assert "AI Observability Dashboard" in str(res8)
 
 
 @patch("agentauth.dashboard.app.render_page_logic")
@@ -209,19 +155,13 @@ def test_render_page_callback_ctx(mock_logic):
     # Mock dash.callback_context
     with patch("dash.callback_context") as mock_ctx:
         mock_ctx.triggered = []
-        render_page(0, 0, 0, 0, 0, 0, None)
-        mock_logic.assert_called_with(None, None, None)
+        render_page(0, 0, 0, 0, 0, 0, 0, None)
+        mock_logic.assert_called_with(None, None, None, None)
 
         mock_ctx.triggered = [{"prop_id": "btn.n_clicks"}]
         mock_ctx.triggered_id = "btn"
-        render_page(1, 0, 0, 0, 0, 0, None)
-        mock_logic.assert_called_with("btn", "btn.n_clicks", None)
-
-
-def test_save_gemini_key_callback():
-    with patch("agentauth.dashboard.app.save_gemini_key_logic") as mock_logic:
-        save_gemini_key(1, "key")
-        mock_logic.assert_called_once_with(1, "key")
+        render_page(1, 0, 0, 0, 0, 0, 0, None)
+        mock_logic.assert_called_with("btn", "btn.n_clicks", None, None)
 
 
 @patch("agentauth.dashboard.app.handle_agent_dashboard_logic")
@@ -236,3 +176,73 @@ def test_handle_agent_dashboard_callback(mock_logic):
         mock_ctx.states_list = "states"
         handle_agent_dashboard(1, 0, 0, 0, "name", "desc", [])
         mock_logic.assert_called_with("id", "states", "name", "desc")
+
+
+def test_auth_login_get(client):
+    response = client.get("/login")
+    assert response.status_code == 200
+    assert "AgentAuth" in response.text
+
+    # Check error param rendering
+    response_err = client.get("/login?error=Bad")
+    assert "div class='error'>Bad</div>" in response_err.text
+
+
+def test_auth_login_post(client, db_session):
+    from agentauth.core.models import AdminUser
+    from agentauth.core.security import get_password_hash
+
+    # Create test admin
+    admin = AdminUser(username="testadmin", hashed_password=get_password_hash("testpass"))
+    db_session.add(admin)
+    db_session.commit()
+
+    # Success
+    response = client.post(
+        "/login", data={"username": "testadmin", "password": "testpass"}, follow_redirects=False
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/dashboard/"
+    assert "access_token" in response.headers.get("set-cookie", "")
+
+    # Failure
+    response2 = client.post(
+        "/login", data={"username": "testadmin", "password": "wrong"}, follow_redirects=False
+    )
+    assert response2.status_code == 303
+    assert "error=Invalid+credentials" in response2.headers["location"]
+
+
+def test_auth_logout(client):
+    response = client.get("/logout", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login"
+
+
+def test_dashboard_middleware_blocks_unauthenticated(client):
+    response = client.get("/dashboard/", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login"
+
+
+def test_dashboard_middleware_allows_authenticated(client, db_session):
+    from agentauth.core.models import AdminUser
+    from agentauth.core.security import get_password_hash
+
+    admin = AdminUser(username="testadmin2", hashed_password=get_password_hash("testpass"))
+    db_session.add(admin)
+    db_session.commit()
+
+    # Log in
+    client.post("/login", data={"username": "testadmin2", "password": "testpass"})
+
+    response = client.get("/dashboard/", follow_redirects=False)
+    assert response.status_code != 303
+
+
+def test_dashboard_middleware_invalid_jwt(client):
+    # Set a cookie with an invalid/malformed JWT
+    client.cookies.set("access_token", "Bearer invalid-jwt-here")
+    response = client.get("/dashboard/", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login"

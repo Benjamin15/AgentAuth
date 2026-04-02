@@ -26,6 +26,11 @@ dependencies = [
     "pandas",
     "numpy",
     "requests",
+    "cryptography",
+    "passlib[bcrypt]",
+    "python-jose[cryptography]",
+    "python-multipart",
+    "argon2-cffi",
 ]
 
 [project.optional-dependencies]
@@ -71,7 +76,7 @@ extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Header"]
 known-first-party = ["agentauth"]
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.13"
 strict = false
 ignore_missing_imports = true
 check_untyped_defs = true
