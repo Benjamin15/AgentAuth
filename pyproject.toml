@@ -42,6 +42,7 @@ test = [
     "ruff",
     "mypy",
     "types-requests",
+    "types-cachetools",
     "pre-commit",
 ]
 
