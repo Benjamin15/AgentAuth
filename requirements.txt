@@ -1,0 +1,7 @@
+fastapi==0.110.1
+uvicorn[standard]==0.29.0
+dash==2.16.1
+sqlalchemy>=2.0.35
+Werkzeug==3.0.1
+python-multipart==0.0.9
+requests==2.31.0
