@@ -64,5 +64,15 @@ curl -X POST "http://127.0.0.1:8000/v1/proxy/gemini" \
      -d '{"contents": [{"parts": [{"text": "Hello world!"}]}]}'
 ```
 
+## 👨‍💻 Developer Guidelines
+
+If you are contributing to this project or invoking an AI agent to write code, please read the [AGENT_INSTRUCTIONS.md](./AGENT_INSTRUCTIONS.md) file carefully.
+
+The project enforces strict quality gates:
+- **100% Code Coverage** is required (`pytest --cov=agentauth`)
+- **Static Typing** is enforced via MyPy (`mypy agentauth`)
+- **Linting & Formatting** is managed by Ruff (`ruff check` & `ruff format`)
+- **Pre-commit Hooks** run locally to prevent bad commits (`pre-commit install`)
+
 ## 📄 License
 This project is open-source and available under the MIT License.
