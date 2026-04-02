@@ -6,6 +6,7 @@ from cachetools import TTLCache
 from fastapi import APIRouter, Depends, Form, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 
+from ..alerting import AlertEngine
 from ..core.adapters import BaseAdapter, GeminiAdapter, MockAdapter
 from ..core.database import SessionLocal
 from ..core.models import Agent, AgentPermission, AgentToken, AuditLog, Integration, ModelPricing
@@ -191,6 +192,13 @@ async def proxy_request(
     )
     db.add(log)
     db.commit()
+
+    # Evaluate budget alert rules in the background (fire-and-forget).
+    # A new DB session is NOT needed here because the commit above has already
+    # persisted the latest cost data; the engine re-queries inside its own call.
+    import asyncio
+
+    asyncio.create_task(AlertEngine.evaluate(agent, db))
 
     # If the response was wrapped by the adapter (e.g. Gemini), return the 'data' part
     return response.get("data", response)

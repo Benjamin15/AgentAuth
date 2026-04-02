@@ -92,8 +92,9 @@ def test_gemini_adapter_success(mock_post):
 
     response = asyncio.run(adapter.forward({"contents": []}))
 
-    assert "candidates" in response
-    assert response["candidates"][0]["content"]["parts"][0]["text"] == "Hello"
+    assert "data" in response
+    assert "candidates" in response["data"]
+    assert response["data"]["candidates"][0]["content"]["parts"][0]["text"] == "Hello"
 
 
 @patch("requests.post")

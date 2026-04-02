@@ -93,3 +93,47 @@ class AdminUser(Base):
     username = Column(String, unique=True, index=True)
     hashed_password = Column(String)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
+class AlertRule(Base):
+    """
+    A budget-threshold alert rule, optionally scoped to a specific agent.
+
+    If ``agent_id`` is NULL the rule applies globally (all agents).
+    ``threshold_pct`` is the percentage of ``monthly_budget_usd`` that triggers
+    the alert (e.g. 80, 90, 100).  ``channel`` selects the adapter used for
+    delivery; ``destination`` holds the adapter-specific target (webhook URL,
+    Slack webhook URL, …).
+    """
+
+    __tablename__ = "alert_rules"
+
+    id = Column(Integer, primary_key=True, index=True)
+    agent_id = Column(Integer, ForeignKey("agents.id"), nullable=True)  # NULL = global
+    threshold_pct = Column(Integer, default=80)  # 80 | 90 | 100
+    channel = Column(String, default="log")  # "log" | "webhook" | "slack"
+    destination = Column(String, nullable=True)  # URL or channel identifier
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    events = relationship("AlertEvent", back_populates="rule", cascade="all, delete-orphan")
+
+
+class AlertEvent(Base):
+    """
+    An immutable record of an alert that was evaluated and dispatched.
+
+    ``delivered`` reflects whether the adapter reported a successful delivery.
+    """
+
+    __tablename__ = "alert_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    rule_id = Column(Integer, ForeignKey("alert_rules.id"))
+    agent_id = Column(Integer, ForeignKey("agents.id"), nullable=True)
+    triggered_at = Column(DateTime, default=datetime.datetime.utcnow)
+    current_pct = Column(Float)  # Actual spend % at trigger time
+    message = Column(Text)
+    delivered = Column(Boolean, default=False)
+
+    rule = relationship("AlertRule", back_populates="events")

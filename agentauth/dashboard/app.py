@@ -8,7 +8,15 @@ from dash import ALL, Input, Output, State, dcc, html
 from dash.exceptions import PreventUpdate
 
 from ..core.database import SessionLocal
-from ..core.models import Agent, AgentPermission, AuditLog, Integration, ModelPricing
+from ..core.models import (
+    Agent,
+    AgentPermission,
+    AlertEvent,
+    AlertRule,
+    AuditLog,
+    Integration,
+    ModelPricing,
+)
 
 
 # Utils
@@ -44,7 +52,7 @@ def get_sidebar():
                     html.A("Integrations", href="#", id="nav-integrations", className="nav-link"),
                     html.Div("Analytics", className="nav-label", style={"marginTop": "20px"}),
                     html.A("Audit Logs", href="#", id="nav-logs", className="nav-link"),
-                    html.A("Alerts", href="#", className="nav-link"),
+                    html.A("Alerts", href="#", id="nav-alerts", className="nav-link"),
                     html.A("Usage Reports", href="#", className="nav-link"),
                     html.Div("Models", className="nav-label", style={"marginTop": "20px"}),
                     html.A("Inventory", href="#", id="nav-inventory", className="nav-link"),
@@ -965,6 +973,270 @@ def get_inventory_view():
     )
 
 
+def get_alerts_view() -> html.Div:
+    """Render the Alert Rules management view.
+
+    Displays all active ``AlertRule`` records in a table and provides a form
+    to create new rules or delete existing ones.  Also shows the last 20
+    ``AlertEvent`` records so admins can confirm notification delivery.
+
+    Returns:
+        A Dash ``html.Div`` containing the full alerts management UI.
+    """
+    db = SessionLocal()
+    agents = db.query(Agent).all()
+    rules = db.query(AlertRule).order_by(AlertRule.created_at.desc()).all()
+    events = db.query(AlertEvent).order_by(AlertEvent.triggered_at.desc()).limit(20).all()
+    db.close()
+
+    agent_map: dict[int, str] = {int(a.id): str(a.name) for a in agents}  # type: ignore[arg-type]
+
+    # --- Rules table ---
+    rule_rows = []
+    for rule in rules:
+        scope = agent_map.get(int(rule.agent_id), "Global") if rule.agent_id else "Global"  # type: ignore[arg-type]
+        status_class = "status-active" if rule.is_active else "status-error"
+        rule_rows.append(
+            html.Tr(
+                [
+                    html.Td(str(rule.id), style={"color": "var(--text-muted)"}),
+                    html.Td(scope, style={"fontWeight": "600"}),
+                    html.Td(f"{rule.threshold_pct}%"),
+                    html.Td(str(rule.channel).capitalize()),
+                    html.Td(
+                        str(rule.destination or "—"),
+                        style={
+                            "fontSize": "0.8rem",
+                            "color": "var(--text-muted)",
+                            "wordBreak": "break-all",
+                        },
+                    ),
+                    html.Td(
+                        html.Div(
+                            className=f"status-pill {status_class}",
+                            children=["Active" if rule.is_active else "Inactive"],
+                        )
+                    ),
+                    html.Td(
+                        html.Button(
+                            "Delete",
+                            id={"type": "delete-alert-btn", "index": int(rule.id)},  # type: ignore[arg-type]
+                            n_clicks=0,
+                            className="btn-premium",
+                            style={"padding": "4px 10px", "fontSize": "0.75rem"},
+                        )
+                    ),
+                ]
+            )
+        )
+
+    # --- Events table ---
+    event_rows = []
+    for ev in events:
+        scope = agent_map.get(int(ev.agent_id), "Global") if ev.agent_id else "Global"  # type: ignore[arg-type]
+        delivered_icon = "✅" if ev.delivered else "❌"
+        event_rows.append(
+            html.Tr(
+                [
+                    html.Td(ev.triggered_at.strftime("%Y-%m-%d %H:%M") if ev.triggered_at else "—"),
+                    html.Td(scope),
+                    html.Td(f"{ev.current_pct:.1f}%"),
+                    html.Td(str(ev.message or "—"), style={"fontSize": "0.8rem"}),
+                    html.Td(delivered_icon, style={"textAlign": "center"}),
+                ]
+            )
+        )
+
+    agent_options = [{"label": "Global (all agents)", "value": ""}] + [
+        {"label": str(a.name), "value": str(a.id)} for a in agents
+    ]
+
+    return html.Div(
+        className="animated",
+        children=[
+            html.H1("Alert Rules"),
+            # New rule form
+            html.Div(
+                className="card",
+                style={"marginBottom": "20px", "border": "1px dashed var(--primary)"},
+                children=[
+                    html.H3("Create New Alert Rule"),
+                    html.Div(
+                        style={
+                            "display": "flex",
+                            "gap": "15px",
+                            "alignItems": "flex-end",
+                            "flexWrap": "wrap",
+                        },
+                        children=[
+                            html.Div(
+                                style={"flex": "1", "minWidth": "160px"},
+                                children=[
+                                    html.Label("Agent (optional)", className="nav-label"),
+                                    dcc.Dropdown(
+                                        id="alert-agent-select",
+                                        options=agent_options,
+                                        value="",
+                                        clearable=False,
+                                        style={"fontSize": "0.85rem"},
+                                    ),
+                                ],
+                            ),
+                            html.Div(
+                                style={"flex": "1", "minWidth": "140px"},
+                                children=[
+                                    html.Label("Threshold (%)", className="nav-label"),
+                                    dcc.Dropdown(
+                                        id="alert-threshold-select",
+                                        options=[
+                                            {"label": "80% — Warning", "value": 80},
+                                            {"label": "90% — Critical", "value": 90},
+                                            {"label": "100% — Hard limit", "value": 100},
+                                        ],
+                                        value=80,
+                                        clearable=False,
+                                        style={"fontSize": "0.85rem"},
+                                    ),
+                                ],
+                            ),
+                            html.Div(
+                                style={"flex": "1", "minWidth": "140px"},
+                                children=[
+                                    html.Label("Channel", className="nav-label"),
+                                    dcc.Dropdown(
+                                        id="alert-channel-select",
+                                        options=[
+                                            {"label": "📋 Log (server)", "value": "log"},
+                                            {"label": "🔗 Webhook", "value": "webhook"},
+                                            {"label": "💬 Slack", "value": "slack"},
+                                        ],
+                                        value="log",
+                                        clearable=False,
+                                        style={"fontSize": "0.85rem"},
+                                    ),
+                                ],
+                            ),
+                            html.Div(
+                                style={"flex": "2", "minWidth": "200px"},
+                                children=[
+                                    html.Label(
+                                        "Destination URL (webhook / Slack)", className="nav-label"
+                                    ),
+                                    dcc.Input(
+                                        id="alert-destination-input",
+                                        type="url",
+                                        placeholder="https://hooks.slack.com/services/…",
+                                        className="enterprise-input",
+                                        style={"width": "100%"},
+                                    ),
+                                ],
+                            ),
+                            html.Button(
+                                "Save Rule",
+                                id="save-alert-btn",
+                                n_clicks=0,
+                                className="btn-premium",
+                                style={"padding": "10px 24px"},
+                            ),
+                        ],
+                    ),
+                    html.Div(
+                        id="alert-save-status", style={"marginTop": "12px", "fontSize": "0.85rem"}
+                    ),
+                ],
+            ),
+            # Rules table
+            html.Div(
+                className="card",
+                style={"marginBottom": "20px"},
+                children=[
+                    html.H3("Active Rules"),
+                    html.Table(
+                        className="enterprise-table",
+                        children=[
+                            html.Thead(
+                                html.Tr(
+                                    [
+                                        html.Th("#"),
+                                        html.Th("Scope"),
+                                        html.Th("Threshold"),
+                                        html.Th("Channel"),
+                                        html.Th("Destination"),
+                                        html.Th("Status"),
+                                        html.Th("Actions"),
+                                    ]
+                                )
+                            ),
+                            html.Tbody(
+                                rule_rows
+                                if rule_rows
+                                else [
+                                    html.Tr(
+                                        [
+                                            html.Td(
+                                                "No rules configured yet.",
+                                                colSpan=7,
+                                                style={
+                                                    "textAlign": "center",
+                                                    "color": "var(--text-muted)",
+                                                },
+                                            )
+                                        ]
+                                    )
+                                ]
+                            ),
+                        ],
+                    ),
+                    html.Div(
+                        id="alert-delete-status", style={"marginTop": "8px", "fontSize": "0.85rem"}
+                    ),
+                ],
+            ),
+            # Event history
+            html.Div(
+                className="card",
+                children=[
+                    html.H3("Recent Alert Events"),
+                    html.Table(
+                        className="enterprise-table",
+                        children=[
+                            html.Thead(
+                                html.Tr(
+                                    [
+                                        html.Th("Triggered At"),
+                                        html.Th("Agent"),
+                                        html.Th("Spend %"),
+                                        html.Th("Message"),
+                                        html.Th("Delivered"),
+                                    ]
+                                )
+                            ),
+                            html.Tbody(
+                                event_rows
+                                if event_rows
+                                else [
+                                    html.Tr(
+                                        [
+                                            html.Td(
+                                                "No events yet.",
+                                                colSpan=5,
+                                                style={
+                                                    "textAlign": "center",
+                                                    "color": "var(--text-muted)",
+                                                },
+                                            )
+                                        ]
+                                    )
+                                ]
+                            ),
+                        ],
+                    ),
+                ],
+            ),
+        ],
+    )
+
+
 def serve_layout():
     return html.Div(
         className="app-container",
@@ -1013,6 +1285,8 @@ def render_page_logic(triggered_id, triggered_prop_id, active_agent_id, time_ran
         return get_agents_view(), None
     if "nav-inventory" in triggered_prop_id:
         return get_inventory_view(), None
+    if "nav-alerts" in triggered_prop_id:
+        return get_alerts_view(), None
 
     return get_dashboard_view(time_range), None
 
@@ -1025,6 +1299,7 @@ def render_page_logic(triggered_id, triggered_prop_id, active_agent_id, time_ran
     Input("nav-integrations", "n_clicks"),
     Input("nav-logs", "n_clicks"),
     Input("nav-inventory", "n_clicks"),
+    Input("nav-alerts", "n_clicks"),
     Input({"type": "back-btn", "index": ALL}, "n_clicks"),
     Input({"type": "stats-btn", "index": ALL}, "n_clicks"),
     Input({"type": "agent-row", "index": ALL}, "n_clicks"),
@@ -1039,6 +1314,7 @@ def render_page(
     int_clicks,
     logs_clicks,
     inv_clicks,
+    alerts_clicks,
     back_clicks,
     stats_clicks,
     row_clicks,
@@ -1192,6 +1468,81 @@ def add_or_update_model_pricing(n_clicks, name, in_price, out_price):
         db.add(new_model)
         msg = f"✅ Model '{name}' added successfully"
     db.commit()
+    db.close()
+    return msg
+
+
+@app.callback(
+    Output("alert-save-status", "children"),
+    Input("save-alert-btn", "n_clicks"),
+    State("alert-agent-select", "value"),
+    State("alert-threshold-select", "value"),
+    State("alert-channel-select", "value"),
+    State("alert-destination-input", "value"),
+    prevent_initial_call=True,
+)
+def save_alert_rule(n_clicks, agent_value, threshold, channel, destination):
+    """Persist a new :class:`~agentauth.core.models.AlertRule` to the database.
+
+    Args:
+        n_clicks: Number of times the Save button was clicked.
+        agent_value: String agent ID from the dropdown, or empty string for global.
+        threshold: Integer threshold percentage (80 | 90 | 100).
+        channel: Notification channel identifier (``"log"``, ``"webhook"``, ``"slack"``).
+        destination: Destination URL; may be ``None`` for the ``"log"`` channel.
+
+    Returns:
+        A status message string displayed below the form.
+    """
+    if not threshold or not channel:
+        return "❌ Threshold and channel are required."
+    if channel in ("webhook", "slack") and not destination:
+        return f"❌ A destination URL is required for the '{channel}' channel."
+
+    agent_id = int(agent_value) if agent_value else None
+
+    db = SessionLocal()
+    rule = AlertRule(
+        agent_id=agent_id,
+        threshold_pct=int(threshold),
+        channel=channel,
+        destination=destination or None,
+        is_active=True,
+    )
+    db.add(rule)
+    db.commit()
+    db.close()
+
+    scope = f"Agent #{agent_id}" if agent_id else "Global"
+    return f"✅ Rule saved: {scope} → {threshold}% via {channel}"
+
+
+@app.callback(
+    Output("alert-delete-status", "children"),
+    Input({"type": "delete-alert-btn", "index": ALL}, "n_clicks"),
+    prevent_initial_call=True,
+)
+def delete_alert_rule(n_clicks_list):
+    """Soft-delete (deactivate) an :class:`~agentauth.core.models.AlertRule`.
+
+    Args:
+        n_clicks_list: List of click counts for each delete button (pattern-match).
+
+    Returns:
+        A status message string displayed below the rules table.
+    """
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+    rule_id = ctx.triggered_id["index"]
+    db = SessionLocal()
+    rule = db.query(AlertRule).filter(AlertRule.id == rule_id).first()
+    if rule:
+        rule.is_active = False  # type: ignore[assignment]
+        db.commit()
+        msg = f"🗑️ Rule #{rule_id} deactivated."
+    else:
+        msg = f"❌ Rule #{rule_id} not found."
     db.close()
     return msg
 
