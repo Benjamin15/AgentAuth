@@ -467,6 +467,13 @@ def handle_agent_dashboard_logic(triggered_id, states_list, new_name, new_desc):
                     db.add(AgentPermission(agent_id=agent_id, scope=scope))
                     db.commit()
 
+        elif t_type == "delete-btn":
+            agent_id = triggered_id["index"]
+            agent = db.query(Agent).filter(Agent.id == agent_id).first()
+            if agent:
+                db.delete(agent)
+                db.commit()
+
     db.close()
     agents_page = page_registry.get("agents")
     updated_view = agents_page().render() if agents_page else None

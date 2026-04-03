@@ -353,3 +353,15 @@ def freeze_agent(agent_id: int, db: Session = Depends(get_db)) -> dict[str, Any]
         auth_cache.clear()  # Kill switch: Invalidate all cached auth results instantly
         return {"status": "success", "is_frozen": agent.is_frozen}
     raise HTTPException(status_code=404)
+
+
+@router.delete("/internal/agents/{agent_id}")
+def delete_agent(agent_id: int, db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Delete an agent from the registry."""
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
+    if agent:
+        db.delete(agent)
+        db.commit()
+        auth_cache.clear()
+        return {"status": "success", "message": f"Agent #{agent_id} deleted"}
+    raise HTTPException(status_code=404, detail="Agent not found")

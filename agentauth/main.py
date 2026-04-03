@@ -15,6 +15,17 @@ app = FastAPI(
     version="0.1.0",
 )
 
+
+@app.get("/")
+def read_root():
+    return {"message": "AgentAuth API"}
+
+
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
+
+
 # Add Security Middleware
 app.add_middleware(DashboardAuthMiddleware)
 
