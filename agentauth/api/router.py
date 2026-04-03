@@ -95,7 +95,7 @@ async def proxy_request(
         )
 
     # Load agent object for the rest of the flow
-    agent = db.query(Agent).get(agent_id)
+    agent = db.get(Agent, agent_id)
     if not agent:
         raise HTTPException(status_code=401, detail="Agent not found.")
 
@@ -143,6 +143,8 @@ async def proxy_request(
                 status_code=500, detail="Gemini API Key not configured in AgentAuth"
             )
         decrypted_key = decrypt_secret(str(integration.provider_key))
+        if decrypted_key is None:
+            raise HTTPException(status_code=500, detail="Failed to decrypt Gemini API Key")
         adapter = GeminiAdapter(api_key=decrypted_key)
     elif integration_name == "mock":
         adapter = MockAdapter()

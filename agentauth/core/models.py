@@ -98,7 +98,9 @@ class AdminUser(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True)
     hashed_password = Column(String)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(
+        DateTime, default=lambda: datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
+    )
 
 
 class AlertRule(Base):
@@ -120,7 +122,9 @@ class AlertRule(Base):
     channel = Column(String, default="log")  # "log" | "webhook" | "slack"
     destination = Column(String, nullable=True)  # URL or channel identifier
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(
+        DateTime, default=lambda: datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
+    )
 
     events = relationship("AlertEvent", back_populates="rule", cascade="all, delete-orphan")
 

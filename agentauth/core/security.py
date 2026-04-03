@@ -24,14 +24,14 @@ else:
 _fernet = Fernet(_fernet_key)
 
 
-def encrypt_secret(val: str) -> str:
+def encrypt_secret(val: Optional[str]) -> Optional[str]:
     """Encrypt a plaintext secret."""
     if not val:
         return val
     return str(_fernet.encrypt(val.encode()).decode())
 
 
-def decrypt_secret(val: str) -> str:
+def decrypt_secret(val: Optional[str]) -> Optional[str]:
     """Decrypt an encrypted secret."""
     if not val:
         return val

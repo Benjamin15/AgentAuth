@@ -7,6 +7,20 @@ from agentauth.core.database import get_db
 from agentauth.core.models import Base
 from agentauth.main import app
 
+
+def get_token(client, agent):
+    """Utility to generate an OAuth token for an agent."""
+    response = client.post(
+        "/oauth/token",
+        data={
+            "grant_type": "client_credentials",
+            "client_id": agent.client_id,
+            "client_secret": agent.client_secret,
+        },
+    )
+    return response.json()["access_token"]
+
+
 # Use an in-memory SQLite database for testing
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
 

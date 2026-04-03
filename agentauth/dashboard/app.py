@@ -2965,5 +2965,5 @@ def handle_registration_submit(n_clicks, name, desc, budget, scopes):
         return dash.no_update, f"❌ Error: {str(e)}"
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     app.run_server(debug=True, port=8000)
