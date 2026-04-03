@@ -4,22 +4,16 @@ from typing import Any
 
 
 class BaseAdapter(ABC):
-    """
-    Base strategy for forwarding requests to upstream LLM or SaaS providers.
-    """
+    """Base strategy for forwarding requests to upstream LLM or SaaS providers."""
 
     @abstractmethod
     async def forward(self, request_data: dict[str, Any]) -> dict[str, Any]:
-        """
-        Takes raw request data, formats it if needed, and sends it to the upstream API.
-        """
+        """Take raw request data, format it if needed, and send it to the upstream API."""
         pass
 
 
 class MockAdapter(BaseAdapter):
-    """
-    Simulates a successful downstream API response. Good for testing proxy routing and IAM blocks.
-    """
+    """Simulates a successful downstream API response. Good for testing proxy routing and IAM blocks."""
 
     async def forward(self, request_data: dict[str, Any]) -> dict[str, Any]:
         # Simulate network latency
@@ -40,9 +34,7 @@ class MockAdapter(BaseAdapter):
 
 
 class GeminiAdapter(BaseAdapter):
-    """
-    Real-world pass-through for Google Gemini API.
-    """
+    """Real-world pass-through for Google Gemini API."""
 
     def __init__(self, api_key: str, model: str = "gemini-1.5-flash"):
         self.api_key = api_key

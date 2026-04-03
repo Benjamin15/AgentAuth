@@ -1,0 +1,33 @@
+name: Bug report
+about: Create a report to help us improve
+title: ''
+labels: bug
+assignees: ''
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report!
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Also tell us, what did you expect to happen?
+      placeholder: Tell us what you did!
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: Please copy and paste any relevant log output. This will be automatically formatted into code, so no need for backticks.
+      render: shell
+  - type: input
+    id: environment
+    attributes:
+      label: Environment Info
+      description: What OS, Python version, and AgentAuth version are you using?
+      placeholder: e.g. MacOS 14.4, Python 3.12, AgentAuth 0.1.0
+    validations:
+      required: true

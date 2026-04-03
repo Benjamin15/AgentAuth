@@ -25,16 +25,17 @@ _DEFAULT_COLOUR = "#ef4444"
 
 
 class SlackAlertAdapter(BaseAlertAdapter):
-    """
-    Delivers alert notifications as a rich Slack message via Incoming Webhook.
+    """Delivers alert notifications as a rich Slack message via Incoming Webhook.
 
     The message uses Slack's *Block Kit* layout so that it renders as a
     formatted card in any Slack client.
 
     Args:
+    ----
         webhook_url: The Slack Incoming Webhook URL (starts with
             ``https://hooks.slack.com/services/…``).
         timeout: HTTP request timeout in seconds (default: 5).
+
     """
 
     def __init__(self, webhook_url: str, timeout: int = 5) -> None:
@@ -42,14 +43,16 @@ class SlackAlertAdapter(BaseAlertAdapter):
         self.timeout = timeout
 
     def _build_blocks(self, payload: AlertPayload) -> list[dict]:
-        """
-        Build a Slack Block Kit message body for the alert payload.
+        """Build a Slack Block Kit message body for the alert payload.
 
         Args:
+        ----
             payload: Structured information about the triggered alert.
 
         Returns:
+        -------
             A list of Slack Block Kit block objects.
+
         """
         colour = _THRESHOLD_COLOURS.get(payload.threshold_pct, _DEFAULT_COLOUR)
         emoji = (
@@ -94,15 +97,17 @@ class SlackAlertAdapter(BaseAlertAdapter):
         ]
 
     async def send(self, payload: AlertPayload) -> bool:
-        """
-        Post a Block Kit card to the configured Slack Incoming Webhook.
+        """Post a Block Kit card to the configured Slack Incoming Webhook.
 
         Args:
+        ----
             payload: Structured information about the triggered alert.
 
         Returns:
+        -------
             ``True`` if Slack acknowledged the message with HTTP 200,
             ``False`` otherwise.
+
         """
         body = {"blocks": self._build_blocks(payload), "text": payload.subject}
         try:

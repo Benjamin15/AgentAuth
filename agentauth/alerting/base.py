@@ -7,10 +7,10 @@ from typing import Optional
 
 @dataclass
 class AlertPayload:
-    """
-    All the information an adapter needs to format and deliver an alert.
+    """All the information an adapter needs to format and deliver an alert.
 
-    Attributes:
+    Attributes
+    ----------
         agent_id: Database ID of the agent that triggered the alert.
             ``None`` for globally-scoped rules.
         agent_name: Human-readable name of the agent.
@@ -19,6 +19,7 @@ class AlertPayload:
         current_spend: Accumulated spend in USD this calendar month.
         budget_usd: Configured monthly budget cap in USD.
         rule_id: Primary key of the ``AlertRule`` that generated this payload.
+
     """
 
     agent_id: Optional[int]
@@ -51,8 +52,7 @@ class AlertPayload:
 
 
 class BaseAlertAdapter(ABC):
-    """
-    Strategy interface for alert notification channels.
+    """Strategy interface for alert notification channels.
 
     Concrete subclasses **must** implement :meth:`send` and return ``True``
     when the notification was delivered successfully, ``False`` otherwise.
@@ -63,12 +63,14 @@ class BaseAlertAdapter(ABC):
 
     @abstractmethod
     async def send(self, payload: AlertPayload) -> bool:
-        """
-        Deliver an alert notification.
+        """Deliver an alert notification.
 
         Args:
+        ----
             payload: Structured information about the triggered alert.
 
         Returns:
+        -------
             ``True`` if the notification was delivered, ``False`` on failure.
+
         """

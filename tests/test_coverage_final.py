@@ -241,15 +241,19 @@ def test_security_master_key_env_coverage():
     # Line 17: AGENTAUTH_MASTER_KEY in env
     from cryptography.fernet import Fernet
 
-    valid_key = Fernet.generate_key().decode()
-
+    import agentauth.core.config as config
     import agentauth.core.security as security
 
+    valid_key = Fernet.generate_key().decode()
+
     with patch.dict(os.environ, {"AGENTAUTH_MASTER_KEY": valid_key}):
+        importlib.reload(config)
         importlib.reload(security)
+        # Verify the key is correctly loaded into security from Settings
         assert security._fernet_key == valid_key.encode()
 
     # Restore for other tests
+    importlib.reload(config)
     importlib.reload(security)
 
 

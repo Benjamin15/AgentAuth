@@ -1,6 +1,9 @@
+import asyncio
 import datetime
 import time
 import uuid
+from collections.abc import Generator
+from typing import Any
 
 from cachetools import TTLCache
 from fastapi import APIRouter, Depends, Form, Header, HTTPException, Request
@@ -11,6 +14,7 @@ from ..core.adapters import BaseAdapter, GeminiAdapter, MockAdapter
 from ..core.database import SessionLocal
 from ..core.models import Agent, AgentPermission, AgentToken, AuditLog, Integration, ModelPricing
 from ..core.security import decrypt_secret, encrypt_secret
+from .schemas import AgentCreate, AgentRead, TokenResponse
 
 # Cache for authentication: (token, integration_name) -> (agent_id, is_frozen, has_permission)
 auth_cache: TTLCache = TTLCache(maxsize=1024, ttl=60)
@@ -18,7 +22,8 @@ auth_cache: TTLCache = TTLCache(maxsize=1024, ttl=60)
 router = APIRouter()
 
 
-def get_db():
+def get_db() -> Generator[Session, None, None]:
+    """Dependency to provide a database session."""
     db = SessionLocal()
     try:
         yield db
@@ -32,7 +37,8 @@ async def proxy_request(
     request: Request,
     authorization: str = Header(None),
     db: Session = Depends(get_db),
-):
+) -> Any:
+    """Proxy an LLM request through AgentAuth, enforcing IAM and quotas."""
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
 
@@ -45,9 +51,9 @@ async def proxy_request(
     else:
         # DB Lookup
         agent_token = db.query(AgentToken).filter(AgentToken.access_token == token).first()
-        if not agent_token or agent_token.expires_at < datetime.datetime.now(datetime.UTC).replace(
-            tzinfo=None
-        ):
+        if not agent_token or agent_token.expires_at < datetime.datetime.now(
+            datetime.timezone.utc
+        ).replace(tzinfo=None):
             raise HTTPException(status_code=401, detail="Invalid or expired Agent API Key")
 
         agent = agent_token.agent
@@ -103,7 +109,7 @@ async def proxy_request(
     if agent.monthly_budget_usd is not None:
         # Calculate total spent this month
         first_of_month = (
-            datetime.datetime.now(datetime.UTC)
+            datetime.datetime.now(datetime.timezone.utc)
             .replace(tzinfo=None)
             .replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         )
@@ -202,22 +208,20 @@ async def proxy_request(
     # Evaluate budget alert rules in the background (fire-and-forget).
     # A new DB session is NOT needed here because the commit above has already
     # persisted the latest cost data; the engine re-queries inside its own call.
-    import asyncio
-
     asyncio.create_task(AlertEngine.evaluate(agent, db))
 
     # If the response was wrapped by the adapter (e.g. Gemini), return the 'data' part
     return response.get("data", response)
 
 
-@router.post("/oauth/token")
+@router.post("/oauth/token", response_model=TokenResponse)
 def oauth_token(
     grant_type: str = Form(...),
     client_id: str = Form(...),
     client_secret: str = Form(...),
     expires_in: int = Form(3600),
     db: Session = Depends(get_db),
-):
+) -> dict[str, Any]:
     """Obtain an access token using Client Credentials Grant."""
     if grant_type != "client_credentials":
         raise HTTPException(status_code=400, detail="Unsupported grant_type")
@@ -239,9 +243,9 @@ def oauth_token(
 
     # Generate token
     token_str = f"aa_token_{uuid.uuid4().hex}"
-    expires = datetime.datetime.now(datetime.UTC).replace(tzinfo=None) + datetime.timedelta(
-        seconds=expires_in
-    )
+    expires = datetime.datetime.now(datetime.timezone.utc).replace(
+        tzinfo=None
+    ) + datetime.timedelta(seconds=expires_in)
 
     agent_token = AgentToken(agent_id=agent.id, access_token=token_str, expires_at=expires)
     db.add(agent_token)
@@ -251,7 +255,9 @@ def oauth_token(
 
 
 @router.post("/internal/agents/{agent_id}/permissions")
-def grant_permission(agent_id: int, payload: dict, db: Session = Depends(get_db)):
+def grant_permission(
+    agent_id: int, payload: dict[str, Any], db: Session = Depends(get_db)
+) -> dict[str, str]:
     """Grant a scope to an agent."""
     scope = payload.get("scope")
     if not scope:
@@ -274,7 +280,7 @@ def grant_permission(agent_id: int, payload: dict, db: Session = Depends(get_db)
 
 
 @router.delete("/internal/agents/{agent_id}/permissions/{scope}")
-def revoke_permission(agent_id: int, scope: str, db: Session = Depends(get_db)):
+def revoke_permission(agent_id: int, scope: str, db: Session = Depends(get_db)) -> dict[str, str]:
     """Revoke a scope from an agent."""
     perm = (
         db.query(AgentPermission)
@@ -290,8 +296,10 @@ def revoke_permission(agent_id: int, scope: str, db: Session = Depends(get_db)):
 
 
 @router.post("/internal/integrations/{name}/key")
-def update_integration_key(name: str, payload: dict, db: Session = Depends(get_db)):
-    """Update the provider API key via Curl"""
+def update_integration_key(
+    name: str, payload: dict[str, Any], db: Session = Depends(get_db)
+) -> dict[str, str]:
+    """Update the provider API key via Curl."""
     integration = db.query(Integration).filter(Integration.name == name).first()
     if not integration:
         # Create it if it doesn't exist
@@ -308,19 +316,16 @@ def update_integration_key(name: str, payload: dict, db: Session = Depends(get_d
 
 
 # Internal management endpoints for the Dash UI
-@router.get("/internal/agents")
-def get_agents(db: Session = Depends(get_db)):
+@router.get("/internal/agents", response_model=list[AgentRead])
+def get_agents(db: Session = Depends(get_db)) -> Any:
+    """Return all registered agents."""
     return db.query(Agent).all()
 
 
-@router.post("/internal/agents")
-def create_agent(payload: dict, db: Session = Depends(get_db)):
+@router.post("/internal/agents", response_model=dict[str, Any])
+def create_agent(payload: AgentCreate, db: Session = Depends(get_db)) -> dict[str, Any]:
     """Create a new agent with a custom name and optional description."""
-    name = payload.get("name")
-    if not name:
-        raise HTTPException(status_code=400, detail="Missing 'name' in JSON payload")
-
-    new_agent = Agent(name=name, description=payload.get("description", ""))
+    new_agent = Agent(name=payload.name, description=payload.description or "")
     db.add(new_agent)
     db.commit()
     db.refresh(new_agent)
@@ -336,7 +341,8 @@ def create_agent(payload: dict, db: Session = Depends(get_db)):
 
 
 @router.post("/internal/agents/{agent_id}/freeze")
-def freeze_agent(agent_id: int, db: Session = Depends(get_db)):
+def freeze_agent(agent_id: int, db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Freeze an agent, blocking all future proxy requests."""
     agent = db.query(Agent).filter(Agent.id == agent_id).first()
     if agent:
         agent.is_frozen = True  # type: ignore

@@ -1,25 +1,22 @@
 import datetime
-import os
-from pathlib import Path
 from typing import Any, Optional
 
 from cryptography.fernet import Fernet
 from jose import jwt
 from passlib.context import CryptContext
 
+from .config import settings
+
 pwd_context = CryptContext(schemes=["argon2", "pbkdf2_sha256"], deprecated="auto")
-SECRET_KEY = os.getenv("AGENTAUTH_JWT_SECRET", "super-secret-default-key-for-jwt")
-ALGORITHM = "HS256"
 
 # Load or generate Fernet key for symmetric encryption
-KEY_FILE = Path(".agentauth_master.key")
-if "AGENTAUTH_MASTER_KEY" in os.environ:
-    _fernet_key = os.environ["AGENTAUTH_MASTER_KEY"].encode()
-elif KEY_FILE.exists():
-    _fernet_key = KEY_FILE.read_bytes()
+if settings.AGENTAUTH_MASTER_KEY:
+    _fernet_key = settings.AGENTAUTH_MASTER_KEY.encode()
+elif settings.KEY_FILE_PATH.exists():
+    _fernet_key = settings.KEY_FILE_PATH.read_bytes()
 else:
     _fernet_key = Fernet.generate_key()
-    KEY_FILE.write_bytes(_fernet_key)
+    settings.KEY_FILE_PATH.write_bytes(_fernet_key)
 
 _fernet = Fernet(_fernet_key)
 
@@ -58,15 +55,15 @@ def create_access_token(
     """Create a signed JWT access token with an optional expiry delta."""
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.datetime.now(datetime.UTC).replace(tzinfo=None) + expires_delta
+        expire = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) + expires_delta
     else:
-        expire = datetime.datetime.now(datetime.UTC).replace(tzinfo=None) + datetime.timedelta(
-            minutes=1440
-        )
+        expire = datetime.datetime.now(datetime.timezone.utc).replace(
+            tzinfo=None
+        ) + datetime.timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
-    return str(jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM))  # type: ignore
+    return str(jwt.encode(to_encode, settings.AGENTAUTH_JWT_SECRET, algorithm=settings.ALGORITHM))
 
 
 def decode_access_token(token: str) -> dict[str, Any]:
     """Decode and verify a JWT access token, returning the payload."""
-    return dict(jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM]))  # type: ignore
+    return dict(jwt.decode(token, settings.AGENTAUTH_JWT_SECRET, algorithms=[settings.ALGORITHM]))

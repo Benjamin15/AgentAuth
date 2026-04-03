@@ -24,7 +24,7 @@ from ..core.models import (
 
 # Utils
 def get_time_delta(time_range: str):
-    now = datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     if time_range == "1h":
         return now - datetime.timedelta(hours=1)
     if time_range == "24h":
@@ -626,11 +626,11 @@ def get_agents_view():
         total_agents = len(agents)
 
         # 2. Global Metrics
-        one_hour_ago = datetime.datetime.now(datetime.UTC).replace(
+        one_hour_ago = datetime.datetime.now(datetime.timezone.utc).replace(
             tzinfo=None
         ) - datetime.timedelta(hours=1)
         month_start = (
-            datetime.datetime.now(datetime.UTC)
+            datetime.datetime.now(datetime.timezone.utc)
             .replace(tzinfo=None)
             .replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         )
@@ -708,7 +708,7 @@ def get_agents_view():
         budget_pct = min(100, (spend / monthly_budget * 100)) if monthly_budget > 0 else 0
         model_tags = [html.Span(s, className="model-tag") for s in agent_scopes[:2]]
         if len(agent_scopes) > 2:
-            model_tags.append(html.Span(f"+{len(agent_scopes)-2}", className="model-tag"))
+            model_tags.append(html.Span(f"+{len(agent_scopes) - 2}", className="model-tag"))
 
         spark_data = np.random.randint(5, 15, 8)
         sparkline_fig = go.Figure(
@@ -1555,8 +1555,10 @@ def get_alerts_view() -> html.Div:
     to create new rules or delete existing ones.  Also shows the last 20
     ``AlertEvent`` records so admins can confirm notification delivery.
 
-    Returns:
+    Returns
+    -------
         A Dash ``html.Div`` containing the full alerts management UI.
+
     """
     db = SessionLocal()
     agents = db.query(Agent).all()
@@ -2064,6 +2066,7 @@ def save_alert_rule(n_clicks, agent_value, threshold, channel, destination):
     """Persist a new :class:`~agentauth.core.models.AlertRule` to the database.
 
     Args:
+    ----
         n_clicks: Number of times the Save button was clicked.
         agent_value: String agent ID from the dropdown, or empty string for global.
         threshold: Integer threshold percentage (80 | 90 | 100).
@@ -2071,7 +2074,9 @@ def save_alert_rule(n_clicks, agent_value, threshold, channel, destination):
         destination: Destination URL; may be ``None`` for the ``"log"`` channel.
 
     Returns:
+    -------
         A status message string displayed below the form.
+
     """
     if not threshold or not channel:
         return "❌ Threshold and channel are required."
@@ -2105,10 +2110,13 @@ def delete_alert_rule(n_clicks_list):
     """Soft-delete (deactivate) an :class:`~agentauth.core.models.AlertRule`.
 
     Args:
+    ----
         n_clicks_list: List of click counts for each delete button (pattern-match).
 
     Returns:
+    -------
         A status message string displayed below the rules table.
+
     """
     ctx = dash.callback_context
     if not ctx.triggered:

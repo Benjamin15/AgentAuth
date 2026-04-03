@@ -15,8 +15,7 @@ logger = logging.getLogger("agentauth.alerts")
 
 
 class WebhookAlertAdapter(BaseAlertAdapter):
-    """
-    Delivers alert notifications as a JSON POST to an arbitrary HTTP endpoint.
+    """Delivers alert notifications as a JSON POST to an arbitrary HTTP endpoint.
 
     The request body follows a simple, self-describing schema so that the
     receiving end can process it without any AgentAuth-specific knowledge:
@@ -36,9 +35,11 @@ class WebhookAlertAdapter(BaseAlertAdapter):
         }
 
     Args:
+    ----
         url: The full URL to POST the alert payload to.
         timeout: HTTP request timeout in seconds (default: 5).
         extra_headers: Optional additional HTTP headers (e.g. auth tokens).
+
     """
 
     def __init__(
@@ -52,15 +53,17 @@ class WebhookAlertAdapter(BaseAlertAdapter):
         self.headers = {"Content-Type": "application/json", **(extra_headers or {})}
 
     async def send(self, payload: AlertPayload) -> bool:
-        """
-        POST the alert payload to the configured webhook URL.
+        """POST the alert payload to the configured webhook URL.
 
         Args:
+        ----
             payload: Structured information about the triggered alert.
 
         Returns:
+        -------
             ``True`` if the server responded with a 2xx status code,
             ``False`` otherwise.
+
         """
         body: dict[str, Any] = {
             "event": "budget_alert",

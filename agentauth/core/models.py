@@ -20,7 +20,7 @@ class Agent(Base):
     is_frozen = Column(Boolean, default=False)
     monthly_budget_usd = Column(Float, nullable=True)  # Quota in USD
     created_at = Column(
-        DateTime, default=lambda: datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
+        DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     )
 
     permissions = relationship(
@@ -38,7 +38,7 @@ class AgentToken(Base):
     access_token = Column(String, unique=True, index=True)
     expires_at = Column(DateTime)
     created_at = Column(
-        DateTime, default=lambda: datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
+        DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     )
 
     agent = relationship("Agent", back_populates="tokens")
@@ -60,7 +60,7 @@ class AuditLog(Base):
     id = Column(Integer, primary_key=True, index=True)
     agent_id = Column(Integer, ForeignKey("agents.id"))
     timestamp = Column(
-        DateTime, default=lambda: datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
+        DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     )
     target_service = Column(String)  # e.g., "OpenAI"
     request_details = Column(Text, nullable=True)
@@ -99,13 +99,12 @@ class AdminUser(Base):
     username = Column(String, unique=True, index=True)
     hashed_password = Column(String)
     created_at = Column(
-        DateTime, default=lambda: datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
+        DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     )
 
 
 class AlertRule(Base):
-    """
-    A budget-threshold alert rule, optionally scoped to a specific agent.
+    """A budget-threshold alert rule, optionally scoped to a specific agent.
 
     If ``agent_id`` is NULL the rule applies globally (all agents).
     ``threshold_pct`` is the percentage of ``monthly_budget_usd`` that triggers
@@ -123,15 +122,14 @@ class AlertRule(Base):
     destination = Column(String, nullable=True)  # URL or channel identifier
     is_active = Column(Boolean, default=True)
     created_at = Column(
-        DateTime, default=lambda: datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
+        DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     )
 
     events = relationship("AlertEvent", back_populates="rule", cascade="all, delete-orphan")
 
 
 class AlertEvent(Base):
-    """
-    An immutable record of an alert that was evaluated and dispatched.
+    """An immutable record of an alert that was evaluated and dispatched.
 
     ``delivered`` reflects whether the adapter reported a successful delivery.
     """
@@ -142,7 +140,7 @@ class AlertEvent(Base):
     rule_id = Column(Integer, ForeignKey("alert_rules.id"))
     agent_id = Column(Integer, ForeignKey("agents.id"), nullable=True)
     triggered_at = Column(
-        DateTime, default=lambda: datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
+        DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     )
     current_pct = Column(Float)  # Actual spend % at trigger time
     message = Column(Text)

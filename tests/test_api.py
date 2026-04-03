@@ -120,8 +120,7 @@ def test_create_agent_success(client, db_session):
 
 def test_create_agent_missing_name(client):
     response = client.post("/internal/agents", json={"description": "Missing name"})
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Missing 'name' in JSON payload"
+    assert response.status_code == 422
 
 
 def test_get_agents(client, db_session):
