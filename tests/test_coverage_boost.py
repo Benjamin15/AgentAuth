@@ -15,8 +15,6 @@ from agentauth.core.models import (
 from agentauth.core.security import decrypt_secret, encrypt_secret
 from agentauth.dashboard.app import (
     add_or_update_model_pricing,
-    get_agents_view,
-    get_inventory_view,
     handle_agent_dashboard_logic,
     handle_registration_submit,
     inspect_json,
@@ -26,6 +24,7 @@ from agentauth.dashboard.app import (
     toggle_registration_drawer,
     update_active_integration,
 )
+from agentauth.dashboard.pages import page_registry
 
 from .conftest import get_token
 
@@ -99,7 +98,7 @@ def test_proxy_quota_exceeded(client, db_session):
     assert "budget" in response.json()["detail"]
 
 
-@patch("agentauth.core.adapters.MockAdapter.forward")
+@patch("agentauth.core.adapters.mock_adapter.MockAdapter.forward")
 def test_proxy_token_summation_and_cost(mock_forward, client, db_session):
     # Case: Prompt + Completion present, but Total is None (Line 174)
     # Case: Pricing exists (Lines 182-184)
@@ -133,13 +132,16 @@ def test_proxy_token_summation_and_cost(mock_forward, client, db_session):
 
 
 def test_get_agents_view_error_handling(db_session):
-    # Trigger Exception in get_agents_view (Lines 687-688)
-    with patch("agentauth.dashboard.app.SessionLocal") as mock_session:
+    # Trigger Exception in AgentsPage.render
+    with patch("agentauth.dashboard.pages.agents.SessionLocal") as mock_session:
         mock_db = MagicMock()
         mock_db.query.side_effect = Exception("DB Failure")
         mock_session.return_value = mock_db
 
-        view = get_agents_view()
+        page_registry.discover("agentauth.dashboard.pages")
+        page_cls = page_registry.get("agents")
+        assert page_cls is not None
+        view = page_cls().render()
         assert "Registry Data Error" in str(view)
 
 
@@ -158,7 +160,11 @@ def test_get_agents_view_complex_states(db_session):
     )
     db_session.commit()
 
-    view = get_agents_view()
+    page_registry.discover("agentauth.dashboard.pages")
+    page_cls = page_registry.get("agents")
+    assert page_cls is not None
+    view = page_cls().render()
+    assert view is not None
 
     # Find the row by checking for Tagged Bot text
     def find_in_tree(comp, target):
@@ -185,7 +191,11 @@ def test_get_agents_view_complex_states(db_session):
 def test_get_inventory_view_coverage(db_session):
     db_session.add(ModelPricing(model_name="zzz-bot", input_1m_price=1.0, output_1m_price=1.0))
     db_session.commit()
-    view = get_inventory_view()
+    page_registry.discover("agentauth.dashboard.pages")
+    page_cls = page_registry.get("models")
+    assert page_cls is not None
+    view = page_cls().render()
+    assert view is not None
     assert "zzz-bot" in str(view)
 
 
@@ -260,16 +270,22 @@ def test_render_page_logic_unit_coverage(db_session):
     db_session.commit()
     # Trigger must NOT be None/nav-dashboard to enter the sidebar/stats logic cleanly in some paths
     # but handle the case where it IS nav-dashboard but active_agent_id is set
-    res, active_id = render_page_logic("nav-dashboard", "", agent.id, "24h")
+    res, active_id = render_page_logic(
+        {"type": "nav-link", "index": "dashboard"}, "", agent.id, "24h"
+    )
     assert active_id == agent.id
 
     # Line 1865: inventory view - use actual nav ID as trigger
-    res_inv, _ = render_page_logic("nav-inventory", "nav-inventory.n_clicks", None, "24h")
+    res_inv, _ = render_page_logic(
+        {"type": "nav-link", "index": "models"}, "nav-link.n_clicks", None, "24h"
+    )
     assert "Model Registry" in str(res_inv)
 
     # Other sidebar links (Logs, Integrations, alerts)
-    for target in ["nav-logs", "nav-integrations", "nav-alerts", "nav-agents"]:
-        res_link, _ = render_page_logic(target, f"{target}.n_clicks", None, "24h")
+    for target in ["logs", "integrations", "alerts", "agents"]:
+        res_link, _ = render_page_logic(
+            {"type": "nav-link", "index": target}, f"{target}.n_clicks", None, "24h"
+        )
         assert res_link is not None
 
 

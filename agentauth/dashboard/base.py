@@ -36,3 +36,38 @@ class BaseWidget(ABC):
     def __repr__(self) -> str:
         """Return a string representation of the widget."""
         return f"<{self.__class__.__name__} priority={self.priority}>"
+
+
+class BasePage(ABC):
+    """Base class for all modular dashboard pages.
+
+    Each page is responsible for its own layout and high-level logic.
+    A page can be the main dashboard, the agents registry, settings, etc.
+    """
+
+    # User-visible label (e.g. "Dashboard", "Agents")
+    label: str = ""
+
+    # Bootstrap Icon name (e.g. "house-door", "robot")
+    icon: str = "circle"
+
+    # Sidebar section ("Core", "Analytics", "Models", "Settings")
+    section: str = "Core"
+
+    # Sorting priority within the section (lower number = higher position).
+    priority: int = 100
+
+    @abstractmethod
+    def render(self, **kwargs: Any) -> Any:
+        """Render the full page layout using Dash components.
+
+        Args:
+        ----
+            **kwargs: Contextual arguments (time_range, active_agent_id, etc.).
+
+        Returns:
+        -------
+            A Dash layout component (usually html.Div).
+
+        """
+        pass

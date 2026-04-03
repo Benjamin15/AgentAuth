@@ -7,12 +7,6 @@ from dash.exceptions import PreventUpdate
 from agentauth.core.models import Agent, AuditLog, Integration
 from agentauth.dashboard.app import (
     delete_alert_rule,
-    get_agent_stats_view,
-    get_agents_view,
-    get_alerts_view,
-    get_dashboard_view,
-    get_integrations_view,
-    get_logs_view,
     get_sidebar,
     handle_agent_dashboard,
     render_integration_pane,
@@ -20,6 +14,7 @@ from agentauth.dashboard.app import (
     render_page_logic,
     save_alert_rule,
 )
+from agentauth.dashboard.pages import page_registry
 
 
 def test_get_sidebar():
@@ -29,7 +24,10 @@ def test_get_sidebar():
 
 
 def test_get_dashboard_view_no_data(db_session):
-    view = get_dashboard_view()
+    page_registry.discover("agentauth.dashboard.pages")
+    page_cls = page_registry.get("dashboard")
+    assert page_cls is not None
+    view = page_cls().render()
     assert "No data for range" in str(view)
 
 
@@ -43,7 +41,10 @@ def test_get_dashboard_view_with_data(db_session):
     db_session.add(log)
     db_session.commit()
 
-    view = get_dashboard_view()
+    page_registry.discover("agentauth.dashboard.pages")
+    page_cls = page_registry.get("dashboard")
+    assert page_cls is not None
+    view = page_cls().render()
     assert "AI Observability Dashboard" in str(view)
     assert "1" in str(view)  # Total requests count
 
@@ -53,13 +54,19 @@ def test_get_agents_view(db_session):
     db_session.add(Integration(name="gemini", is_active=True))
     db_session.commit()
 
-    view = get_agents_view()
+    page_registry.discover("agentauth.dashboard.pages")
+    page_cls = page_registry.get("agents")
+    assert page_cls is not None
+    view = page_cls().render()
     assert "AI Agents Registry" in str(view)
     assert "Agent 1" in str(view)
 
 
 def test_get_agent_stats_view_not_found(db_session):
-    view = get_agent_stats_view(999)
+    page_registry.discover("agentauth.dashboard.pages")
+    page_cls = page_registry.get("agents")
+    assert page_cls is not None
+    view = page_cls().render(active_agent_id=999)
     assert "Agent not found" in str(view)
 
 
@@ -67,7 +74,10 @@ def test_get_agent_stats_view_no_logs(db_session):
     agent = Agent(name="Silent Agent")
     db_session.add(agent)
     db_session.commit()
-    view = get_agent_stats_view(agent.id)
+    page_registry.discover("agentauth.dashboard.pages")
+    page_cls = page_registry.get("agents")
+    assert page_cls is not None
+    view = page_cls().render(active_agent_id=agent.id)
     assert "No data available." in str(view)
 
 
@@ -82,7 +92,10 @@ def test_get_agent_stats_view_with_logs(db_session):
     )
     db_session.commit()
 
-    view = get_agent_stats_view(agent.id)
+    page_registry.discover("agentauth.dashboard.pages")
+    page_cls = page_registry.get("agents")
+    assert page_cls is not None
+    view = page_cls().render(active_agent_id=agent.id)
     assert "Deep Inspection: Chatty Agent" in str(view)
 
 
@@ -97,7 +110,10 @@ def test_get_logs_view(db_session):
     )
     db_session.commit()
 
-    view = get_logs_view()
+    page_registry.discover("agentauth.dashboard.pages")
+    page_cls = page_registry.get("logs")
+    assert page_cls is not None
+    view = page_cls().render()
     assert "Global Audit Logs" in str(view)
     assert "test" in str(view)
 
@@ -105,7 +121,10 @@ def test_get_logs_view(db_session):
 def test_get_integrations_view(db_session):
     db_session.add(Integration(name="gemini", provider_key="abc"))
     db_session.commit()
-    view = get_integrations_view()
+    page_registry.discover("agentauth.dashboard.pages")
+    page_cls = page_registry.get("integrations")
+    assert page_cls is not None
+    view = page_cls().render()
     assert "Services' Sidebar" in str(view)
 
     pane = render_integration_pane("openai")
@@ -125,7 +144,10 @@ def test_get_alerts_view(db_session):
     db_session.add(event)
     db_session.commit()
 
-    view = get_alerts_view()
+    page_registry.discover("agentauth.dashboard.pages")
+    page_cls = page_registry.get("alerts")
+    assert page_cls is not None
+    view = page_cls().render()
     assert "Alert Rules" in str(view)
     assert "AlertBot" in str(view)
     assert "90%" in str(view)
@@ -190,16 +212,23 @@ def test_render_page_logic(db_session):
     )
     db_session.commit()
 
-    res1, id1 = render_page_logic("nav-logs", "nav-logs.n_clicks", None, "24h")
+    page_registry.discover("agentauth.dashboard.pages")
+    res1, id1 = render_page_logic(
+        {"type": "nav-link", "index": "logs"}, "nav-link.n_clicks", None, "24h"
+    )
     assert "Global Audit Logs" in str(res1)
 
-    res2, id2 = render_page_logic("nav-integrations", "nav-integrations.n_clicks", None, "24h")
+    res2, id2 = render_page_logic(
+        {"type": "nav-link", "index": "integrations"}, "nav-link.n_clicks", None, "24h"
+    )
     assert "Services' Sidebar" in str(res2)
 
-    res3, id3 = render_page_logic("nav-agents", "nav-agents.n_clicks", None, "24h")
-    assert "AI Agents Registry" in str(res3)
+    res3, id3 = render_page_logic(
+        {"type": "nav-link", "index": "alerts"}, "nav-link.n_clicks", None, "24h"
+    )
+    assert "Alert Rules" in str(res3)
 
-    res_alt, id_alt = render_page_logic("nav-alerts", "nav-alerts.n_clicks", None, "24h")
+    res_alt, id_alt = render_page_logic({"type": "nav-link", "index": "alerts"}, "", None, "24h")
     assert "Alert Rules" in str(res_alt)
 
     # Test dict triggers (Stats/Back)
@@ -228,12 +257,12 @@ def test_render_page_callback_ctx(mock_logic):
     # Mock dash.callback_context
     with patch("dash.callback_context") as mock_ctx:
         mock_ctx.triggered = []
-        render_page(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, None, None)
+        render_page([0], 0, 0, 0, 0, 0, "24h")
         assert mock_logic.call_count == 1
 
-        mock_ctx.triggered = [{"prop_id": "btn.n_clicks"}]
-        mock_ctx.triggered_id = "btn"
-        render_page(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, None, None)
+        mock_ctx.triggered = [{"prop_id": '{"index":"dashboard","type":"nav-link"}.n_clicks'}]
+        mock_ctx.triggered_id = {"index": "dashboard", "type": "nav-link"}
+        render_page([1], 0, 0, 0, 0, 0, "24h")
         assert mock_logic.call_count == 2
 
 

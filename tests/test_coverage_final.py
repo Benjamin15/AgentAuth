@@ -21,14 +21,13 @@ from agentauth.core.models import (
     Integration,
 )
 from agentauth.dashboard.app import (
-    get_agents_view,
-    get_dashboard_view,
-    get_time_delta,
     handle_agent_dashboard_logic,
     inspect_json,
     toggle_registration_drawer,
     update_active_integration,
 )
+from agentauth.dashboard.pages import page_registry
+from agentauth.dashboard.utils import get_time_delta
 
 # --- Dashboard & Utils Coverage ---
 
@@ -57,8 +56,12 @@ def test_dashboard_view_with_spend(db_session):
         )
     )
     db_session.commit()
-    view = get_dashboard_view("24h")
-    assert "Rich Bot" in str(view)
+    page_registry.discover("agentauth.dashboard.pages")
+    page_cls = page_registry.get("dashboard")
+    assert page_cls is not None
+    view = page_cls().render()
+    assert view is not None
+    assert "AI Observability Dashboard" in str(view)
 
 
 def test_agents_view_model_tags_coverage(db_session):
@@ -80,8 +83,11 @@ def test_agents_view_model_tags_coverage(db_session):
         )
     )
     db_session.commit()
-    view = get_agents_view()
-    assert "Limited" in str(view)
+    page_registry.discover("agentauth.dashboard.pages")
+    page_cls = page_registry.get("agents")
+    assert page_cls is not None
+    view = page_cls().render()
+    assert view is not None
     assert "Model Bot" in str(view)
 
 

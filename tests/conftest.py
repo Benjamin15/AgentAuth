@@ -79,6 +79,15 @@ def mock_db_sessions(monkeypatch, db_session):
     monkeypatch.setattr("agentauth.api.router.SessionLocal", MockSessionLocal())
     monkeypatch.setattr("agentauth.core.database.SessionLocal", MockSessionLocal())
 
+    # Also patch all modular pages to ensure they use the test session
+    for page in ["dashboard", "agents", "integrations", "logs", "alerts", "models"]:
+        try:
+            monkeypatch.setattr(
+                f"agentauth.dashboard.pages.{page}.SessionLocal", MockSessionLocal()
+            )
+        except (AttributeError, ImportError):
+            pass
+
     yield
 
     db_session.close = original_close
