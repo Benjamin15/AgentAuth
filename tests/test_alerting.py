@@ -233,7 +233,7 @@ async def test_engine_deduplicates_within_month(db_session):
     existing = AlertEvent(
         rule_id=rule.id,
         agent_id=agent.id,
-        triggered_at=datetime.datetime.utcnow(),
+        triggered_at=datetime.datetime.now(datetime.UTC).replace(tzinfo=None),
         current_pct=90.0,
         message="Already fired",
         delivered=True,

@@ -31,6 +31,11 @@ _Last updated: 2026-04-02_
 - [ ] **Smart Benchmarking** : Interface pour comparer Latence vs Coût vs Qualité entre modèles
 - [ ] **Agent DRI (Deep Inspection)** : Visualisation enrichie de l'historique complet des conversations
 - [ ] **Semantic Drift** : Monitoring de la stabilité des réponses via vector embeddings
+- [ ] **Integrations Data Sync** : Connecter la vue Integrations aux données réelles :
+    - [ ] Aggregation des métriques (Queries/Tokens/Spend) via `AuditLog`
+    - [ ] Graphiques de latence réels (P99/Avg) par provider
+    - [ ] Synchronisation automatique de la configuration (Version/Region) via probes API
+    - [ ] Barre d'usage des quotas synchronisée avec les budgets réels
 
 ---
 

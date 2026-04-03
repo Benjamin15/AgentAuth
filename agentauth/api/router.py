@@ -45,7 +45,9 @@ async def proxy_request(
     else:
         # DB Lookup
         agent_token = db.query(AgentToken).filter(AgentToken.access_token == token).first()
-        if not agent_token or agent_token.expires_at < datetime.datetime.utcnow():
+        if not agent_token or agent_token.expires_at < datetime.datetime.now(datetime.UTC).replace(
+            tzinfo=None
+        ):
             raise HTTPException(status_code=401, detail="Invalid or expired Agent API Key")
 
         agent = agent_token.agent
@@ -100,8 +102,10 @@ async def proxy_request(
     # 3. Quota Check (Hard Block)
     if agent.monthly_budget_usd is not None:
         # Calculate total spent this month
-        first_of_month = datetime.datetime.utcnow().replace(
-            day=1, hour=0, minute=0, second=0, microsecond=0
+        first_of_month = (
+            datetime.datetime.now(datetime.UTC)
+            .replace(tzinfo=None)
+            .replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         )
         total_spent = (
             db.query(AuditLog)
@@ -233,7 +237,9 @@ def oauth_token(
 
     # Generate token
     token_str = f"aa_token_{uuid.uuid4().hex}"
-    expires = datetime.datetime.utcnow() + datetime.timedelta(seconds=expires_in)
+    expires = datetime.datetime.now(datetime.UTC).replace(tzinfo=None) + datetime.timedelta(
+        seconds=expires_in
+    )
 
     agent_token = AgentToken(agent_id=agent.id, access_token=token_str, expires_at=expires)
     db.add(agent_token)

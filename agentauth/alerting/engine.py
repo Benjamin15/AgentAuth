@@ -90,8 +90,10 @@ class AlertEngine:
             return  # No budget configured — nothing to alert on.
 
         # ---- 1. Calculate current monthly spend ----
-        first_of_month = datetime.datetime.utcnow().replace(
-            day=1, hour=0, minute=0, second=0, microsecond=0
+        first_of_month = (
+            datetime.datetime.now(datetime.UTC)
+            .replace(tzinfo=None)
+            .replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         )
         logs = (
             db.query(AuditLog)

@@ -58,9 +58,11 @@ def create_access_token(
     """Create a signed JWT access token with an optional expiry delta."""
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.datetime.utcnow() + expires_delta
+        expire = datetime.datetime.now(datetime.UTC).replace(tzinfo=None) + expires_delta
     else:
-        expire = datetime.datetime.utcnow() + datetime.timedelta(minutes=1440)
+        expire = datetime.datetime.now(datetime.UTC).replace(tzinfo=None) + datetime.timedelta(
+            minutes=1440
+        )
     to_encode.update({"exp": expire})
     return str(jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM))  # type: ignore
 

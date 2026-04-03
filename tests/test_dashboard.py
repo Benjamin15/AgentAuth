@@ -15,6 +15,7 @@ from agentauth.dashboard.app import (
     get_logs_view,
     get_sidebar,
     handle_agent_dashboard,
+    render_integration_pane,
     render_page,
     render_page_logic,
     save_alert_rule,
@@ -53,7 +54,7 @@ def test_get_agents_view(db_session):
     db_session.commit()
 
     view = get_agents_view()
-    assert "AI Agents Inventory" in str(view)
+    assert "AI Agents Registry" in str(view)
     assert "Agent 1" in str(view)
 
 
@@ -105,8 +106,10 @@ def test_get_integrations_view(db_session):
     db_session.add(Integration(name="gemini", provider_key="abc"))
     db_session.commit()
     view = get_integrations_view()
-    assert "Integrations & Providers" in str(view)
-    assert "Master API Key is configured" in str(view)
+    assert "Services' Sidebar" in str(view)
+
+    pane = render_integration_pane("openai")
+    assert "OpenAI API Key" in str(pane)
 
 
 def test_get_alerts_view(db_session):
@@ -191,10 +194,10 @@ def test_render_page_logic(db_session):
     assert "Global Audit Logs" in str(res1)
 
     res2, id2 = render_page_logic("nav-integrations", "nav-integrations.n_clicks", None, "24h")
-    assert "Integrations & Providers" in str(res2)
+    assert "Services' Sidebar" in str(res2)
 
     res3, id3 = render_page_logic("nav-agents", "nav-agents.n_clicks", None, "24h")
-    assert "AI Agents Inventory" in str(res3)
+    assert "AI Agents Registry" in str(res3)
 
     res_alt, id_alt = render_page_logic("nav-alerts", "nav-alerts.n_clicks", None, "24h")
     assert "Alert Rules" in str(res_alt)
@@ -205,7 +208,7 @@ def test_render_page_logic(db_session):
 
     res5, id5 = render_page_logic({"type": "back-btn", "index": "agents"}, None, 1, "24h")
     assert id5 is None
-    assert "AI Agents Inventory" in str(res5)
+    assert "AI Agents Registry" in str(res5)
 
     # Test unknown button id
     res6, id6 = render_page_logic("unknown-btn", "unknown-btn.n_clicks", None, "24h")

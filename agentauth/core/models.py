@@ -19,7 +19,9 @@ class Agent(Base):
     client_secret = Column(String, default=lambda: f"aa_secret_{uuid.uuid4().hex}")
     is_frozen = Column(Boolean, default=False)
     monthly_budget_usd = Column(Float, nullable=True)  # Quota in USD
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(
+        DateTime, default=lambda: datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
+    )
 
     permissions = relationship(
         "AgentPermission", back_populates="agent", cascade="all, delete-orphan"
@@ -35,7 +37,9 @@ class AgentToken(Base):
     agent_id = Column(Integer, ForeignKey("agents.id"))
     access_token = Column(String, unique=True, index=True)
     expires_at = Column(DateTime)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(
+        DateTime, default=lambda: datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
+    )
 
     agent = relationship("Agent", back_populates="tokens")
 
@@ -55,7 +59,9 @@ class AuditLog(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     agent_id = Column(Integer, ForeignKey("agents.id"))
-    timestamp = Column(DateTime, default=datetime.datetime.utcnow)
+    timestamp = Column(
+        DateTime, default=lambda: datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
+    )
     target_service = Column(String)  # e.g., "OpenAI"
     request_details = Column(Text, nullable=True)
     response_status = Column(Integer)
@@ -131,7 +137,9 @@ class AlertEvent(Base):
     id = Column(Integer, primary_key=True, index=True)
     rule_id = Column(Integer, ForeignKey("alert_rules.id"))
     agent_id = Column(Integer, ForeignKey("agents.id"), nullable=True)
-    triggered_at = Column(DateTime, default=datetime.datetime.utcnow)
+    triggered_at = Column(
+        DateTime, default=lambda: datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
+    )
     current_pct = Column(Float)  # Actual spend % at trigger time
     message = Column(Text)
     delivered = Column(Boolean, default=False)
