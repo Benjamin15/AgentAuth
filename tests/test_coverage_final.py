@@ -5,12 +5,12 @@ from unittest.mock import patch
 import dash
 import pytest
 
+from agentauth.alerting.adapters.log import LogAlertAdapter
+from agentauth.alerting.adapters.slack import SlackAlertAdapter
+from agentauth.alerting.adapters.webhook import WebhookAlertAdapter
 from agentauth.alerting.base import AlertPayload
 from agentauth.alerting.engine import AlertEngine, get_adapter
-from agentauth.alerting.log import LogAlertAdapter
-from agentauth.alerting.slack import SlackAlertAdapter
-from agentauth.alerting.webhook import WebhookAlertAdapter
-from agentauth.core.adapters import GeminiAdapter
+from agentauth.core.adapters.gemini_adapter import GeminiAdapter
 from agentauth.core.database import SessionLocal
 from agentauth.core.models import (
     Agent,
@@ -234,7 +234,7 @@ async def test_proxy_decryption_failure_coverage(db_session, client):
     with patch("agentauth.api.router.decrypt_secret", return_value=None):
         response = client.post("/v1/proxy/gemini", headers={"Authorization": f"Bearer {token}"})
         assert response.status_code == 500
-        assert "Failed to decrypt" in response.json()["detail"]
+        assert "API Key for 'gemini' not configured" in response.json()["detail"]
 
 
 def test_security_master_key_env_coverage():

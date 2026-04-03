@@ -1,17 +1,10 @@
-"""SlackAlertAdapter — delivers alerts via a Slack Incoming Webhook.
-
-Configure a Slack app with the "Incoming Webhooks" feature enabled and
-provide the generated webhook URL as the ``destination`` value of an
-``AlertRule`` with ``channel = "slack"``.
-
-Reference: https://api.slack.com/messaging/webhooks
-"""
-
 import logging
+from typing import Any
 
 import requests
 
-from .base import AlertPayload, BaseAlertAdapter
+from ..base import AlertPayload, BaseAlertAdapter
+from . import alert_registry
 
 logger = logging.getLogger("agentauth.alerts")
 
@@ -24,6 +17,7 @@ _THRESHOLD_COLOURS: dict[int, str] = {
 _DEFAULT_COLOUR = "#ef4444"
 
 
+@alert_registry.register("slack")
 class SlackAlertAdapter(BaseAlertAdapter):
     """Delivers alert notifications as a rich Slack message via Incoming Webhook.
 
@@ -38,7 +32,8 @@ class SlackAlertAdapter(BaseAlertAdapter):
 
     """
 
-    def __init__(self, webhook_url: str, timeout: int = 5) -> None:
+    def __init__(self, webhook_url: str = "", timeout: int = 5, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
         self.webhook_url = webhook_url
         self.timeout = timeout
 
@@ -109,6 +104,10 @@ class SlackAlertAdapter(BaseAlertAdapter):
             ``False`` otherwise.
 
         """
+        if not self.webhook_url:
+            logger.error("[ALERT][Slack] Cannot send: missing webhook_url")
+            return False
+
         body = {"blocks": self._build_blocks(payload), "text": payload.subject}
         try:
             resp = requests.post(self.webhook_url, json=body, timeout=self.timeout)

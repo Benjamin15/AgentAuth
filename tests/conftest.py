@@ -9,7 +9,7 @@ from agentauth.main import app
 
 
 def get_token(client, agent):
-    """Utility to generate an OAuth token for an agent."""
+    """Generate an OAuth token for an agent."""
     response = client.post(
         "/oauth/token",
         data={

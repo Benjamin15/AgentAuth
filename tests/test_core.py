@@ -1,6 +1,8 @@
 from unittest.mock import MagicMock, patch
 
-from agentauth.core.adapters import BaseAdapter, GeminiAdapter, MockAdapter
+from agentauth.core.adapters.base import BaseAdapter
+from agentauth.core.adapters.gemini_adapter import GeminiAdapter
+from agentauth.core.adapters.mock_adapter import MockAdapter
 from agentauth.core.database import get_db
 from agentauth.core.models import Agent, Integration
 

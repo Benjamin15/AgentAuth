@@ -16,11 +16,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from agentauth.alerting.adapters.log import LogAlertAdapter
+from agentauth.alerting.adapters.slack import SlackAlertAdapter
+from agentauth.alerting.adapters.webhook import WebhookAlertAdapter
 from agentauth.alerting.base import AlertPayload
 from agentauth.alerting.engine import AlertEngine, get_adapter
-from agentauth.alerting.log import LogAlertAdapter
-from agentauth.alerting.slack import SlackAlertAdapter
-from agentauth.alerting.webhook import WebhookAlertAdapter
 from agentauth.core.models import Agent, AlertEvent, AlertRule, AuditLog
 
 # A fully-typed default payload; tests can override fields via dataclasses.replace().
@@ -83,7 +83,9 @@ async def test_webhook_adapter_success():
     adapter = WebhookAlertAdapter(url="https://example.com/hook")
     mock_resp = MagicMock()
     mock_resp.raise_for_status.return_value = None
-    with patch("agentauth.alerting.webhook.requests.post", return_value=mock_resp) as mock_post:
+    with patch(
+        "agentauth.alerting.adapters.webhook.requests.post", return_value=mock_resp
+    ) as mock_post:
         result = await adapter.send(_make_payload())
     assert result is True
     mock_post.assert_called_once()
@@ -95,7 +97,9 @@ async def test_webhook_adapter_success():
 @pytest.mark.asyncio
 async def test_webhook_adapter_failure():
     adapter = WebhookAlertAdapter(url="https://example.com/hook")
-    with patch("agentauth.alerting.webhook.requests.post", side_effect=ConnectionError("down")):
+    with patch(
+        "agentauth.alerting.adapters.webhook.requests.post", side_effect=ConnectionError("down")
+    ):
         result = await adapter.send(_make_payload())
     assert result is False
 
@@ -110,7 +114,9 @@ async def test_slack_adapter_success():
     adapter = SlackAlertAdapter(webhook_url="https://hooks.slack.com/services/test")
     mock_resp = MagicMock()
     mock_resp.raise_for_status.return_value = None
-    with patch("agentauth.alerting.slack.requests.post", return_value=mock_resp) as mock_post:
+    with patch(
+        "agentauth.alerting.adapters.slack.requests.post", return_value=mock_resp
+    ) as mock_post:
         result = await adapter.send(_make_payload())
     assert result is True
     _, kwargs = mock_post.call_args
@@ -120,7 +126,9 @@ async def test_slack_adapter_success():
 @pytest.mark.asyncio
 async def test_slack_adapter_failure():
     adapter = SlackAlertAdapter(webhook_url="https://hooks.slack.com/services/test")
-    with patch("agentauth.alerting.slack.requests.post", side_effect=ConnectionError("down")):
+    with patch(
+        "agentauth.alerting.adapters.slack.requests.post", side_effect=ConnectionError("down")
+    ):
         result = await adapter.send(_make_payload())
     assert result is False
 
@@ -203,7 +211,9 @@ async def test_engine_fires_at_threshold(db_session):
     )
     db_session.commit()
 
-    with patch("agentauth.alerting.log.LogAlertAdapter.send", return_value=True) as mock_send:
+    with patch(
+        "agentauth.alerting.adapters.log.LogAlertAdapter.send", return_value=True
+    ) as mock_send:
         await AlertEngine.evaluate(agent, db_session)
         mock_send.assert_called_once()
 
@@ -233,7 +243,7 @@ async def test_engine_deduplicates_within_month(db_session):
     existing = AlertEvent(
         rule_id=rule.id,
         agent_id=agent.id,
-        triggered_at=datetime.datetime.now(datetime.UTC).replace(tzinfo=None),
+        triggered_at=datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None),
         current_pct=90.0,
         message="Already fired",
         delivered=True,
@@ -241,7 +251,7 @@ async def test_engine_deduplicates_within_month(db_session):
     db_session.add(existing)
     db_session.commit()
 
-    with patch("agentauth.alerting.log.LogAlertAdapter.send") as mock_send:
+    with patch("agentauth.alerting.adapters.log.LogAlertAdapter.send") as mock_send:
         await AlertEngine.evaluate(agent, db_session)
         mock_send.assert_not_called()
 
@@ -261,7 +271,7 @@ async def test_engine_global_rule_applies_to_all_agents(db_session):
     )
     db_session.commit()
 
-    with patch("agentauth.alerting.log.LogAlertAdapter.send", return_value=True):
+    with patch("agentauth.alerting.adapters.log.LogAlertAdapter.send", return_value=True):
         await AlertEngine.evaluate(agent, db_session)
 
     assert db_session.query(AlertEvent).count() == 1

@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Form, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from ..alerting import AlertEngine
-from ..core.adapters import BaseAdapter, GeminiAdapter, MockAdapter
+from ..core.adapters import get_adapter
 from ..core.database import SessionLocal
 from ..core.models import Agent, AgentPermission, AgentToken, AuditLog, Integration, ModelPricing
 from ..core.security import decrypt_secret, encrypt_secret
@@ -142,22 +142,24 @@ async def proxy_request(
             status_code=400, detail=f"Integration '{integration_name}' not found in database"
         )
 
-    adapter: BaseAdapter
-    if integration_name == "gemini":
-        if not integration.provider_key:
-            raise HTTPException(
-                status_code=500, detail="Gemini API Key not configured in AgentAuth"
-            )
-        decrypted_key = decrypt_secret(str(integration.provider_key))
-        if decrypted_key is None:
-            raise HTTPException(status_code=500, detail="Failed to decrypt Gemini API Key")
-        adapter = GeminiAdapter(api_key=decrypted_key)
-    elif integration_name == "mock":
-        adapter = MockAdapter()
-    else:
+    try:
+        adapter_cls = get_adapter(integration_name)
+    except ValueError:
         raise HTTPException(
             status_code=400, detail=f"Adapter for '{integration_name}' not implemented"
+        ) from None
+
+    # Resolve API Key if any
+    api_key = ""
+    if integration.provider_key:
+        api_key = decrypt_secret(str(integration.provider_key)) or ""
+
+    if adapter_cls.requires_auth and not api_key:
+        raise HTTPException(
+            status_code=500, detail=f"API Key for '{integration_name}' not configured in AgentAuth."
         )
+
+    adapter = adapter_cls(api_key=api_key)
 
     # 4. Forward Request
     try:

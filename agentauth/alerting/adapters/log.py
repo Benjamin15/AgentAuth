@@ -1,17 +1,12 @@
-"""LogAlertAdapter — writes alerts to the Python standard logger.
-
-This adapter is the default fallback when no external destination is
-configured.  It is also the recommended adapter for local development and
-integration testing because it requires no network credentials.
-"""
-
 import logging
 
-from .base import AlertPayload, BaseAlertAdapter
+from ..base import AlertPayload, BaseAlertAdapter
+from . import alert_registry
 
 logger = logging.getLogger("agentauth.alerts")
 
 
+@alert_registry.register("log")
 class LogAlertAdapter(BaseAlertAdapter):
     """Delivers alert notifications by writing to the Python logging system.
 

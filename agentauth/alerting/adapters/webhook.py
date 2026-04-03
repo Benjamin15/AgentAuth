@@ -1,38 +1,17 @@
-"""WebhookAlertAdapter — delivers alerts via an HTTP POST to a configurable URL.
-
-Compatible with any service that accepts incoming webhooks: n8n, Zapier,
-Make (Integromat), custom microservices, etc.
-"""
-
 import logging
 from typing import Any
 
 import requests
 
-from .base import AlertPayload, BaseAlertAdapter
+from ..base import AlertPayload, BaseAlertAdapter
+from . import alert_registry
 
 logger = logging.getLogger("agentauth.alerts")
 
 
+@alert_registry.register("webhook")
 class WebhookAlertAdapter(BaseAlertAdapter):
     """Delivers alert notifications as a JSON POST to an arbitrary HTTP endpoint.
-
-    The request body follows a simple, self-describing schema so that the
-    receiving end can process it without any AgentAuth-specific knowledge:
-
-    .. code-block:: json
-
-        {
-          "event": "budget_alert",
-          "subject": "...",
-          "agent_id": 1,
-          "agent_name": "...",
-          "threshold_pct": 90,
-          "current_pct": 92.4,
-          "current_spend_usd": 46.20,
-          "budget_usd": 50.00,
-          "rule_id": 3
-        }
 
     Args:
     ----
@@ -44,10 +23,12 @@ class WebhookAlertAdapter(BaseAlertAdapter):
 
     def __init__(
         self,
-        url: str,
+        url: str = "",
         timeout: int = 5,
         extra_headers: dict[str, str] | None = None,
+        **kwargs: Any,
     ) -> None:
+        super().__init__(**kwargs)
         self.url = url
         self.timeout = timeout
         self.headers = {"Content-Type": "application/json", **(extra_headers or {})}
@@ -65,6 +46,10 @@ class WebhookAlertAdapter(BaseAlertAdapter):
             ``False`` otherwise.
 
         """
+        if not self.url:
+            logger.error("[ALERT][Webhook] Cannot send: missing url")
+            return False
+
         body: dict[str, Any] = {
             "event": "budget_alert",
             "subject": payload.subject,

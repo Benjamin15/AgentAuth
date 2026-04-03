@@ -14,10 +14,8 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from ..core.models import Agent, AlertEvent, AlertRule, AuditLog
+from .adapters import get_adapter as get_adapter_from_registry
 from .base import AlertPayload, BaseAlertAdapter
-from .log import LogAlertAdapter
-from .slack import SlackAlertAdapter
-from .webhook import WebhookAlertAdapter
 
 logger = logging.getLogger("agentauth.alerts")
 
@@ -30,27 +28,34 @@ def get_adapter(channel: str, destination: Optional[str]) -> BaseAlertAdapter:
 
     Falls back to :class:`LogAlertAdapter` when the channel is unknown or the
     destination is not configured.
-
-    Args:
-    ----
-        channel: One of ``"log"``, ``"webhook"``, or ``"slack"``.
-        destination: Channel-specific target (URL for webhook / Slack).
-
-    Returns:
-    -------
-        An instantiated, ready-to-use adapter.
-
     """
-    if channel == "webhook" and destination:
-        return WebhookAlertAdapter(url=destination)
-    if channel == "slack" and destination:
-        return SlackAlertAdapter(webhook_url=destination)
-    if channel != "log":
-        logger.warning(
-            "[AlertEngine] Unknown channel '%s' or missing destination — falling back to log.",
-            channel,
-        )
-    return LogAlertAdapter()
+    try:
+        adapter_cls = get_adapter_from_registry(channel)
+        if channel == "webhook":
+            if destination:
+                return adapter_cls(url=destination)  # type: ignore[call-arg]
+            raise ValueError("Webhook destination missing")
+        if channel == "slack":
+            if destination:
+                return adapter_cls(webhook_url=destination)  # type: ignore[call-arg]
+            raise ValueError("Slack destination missing")
+
+        return adapter_cls()
+    except Exception:
+        if channel != "log":
+            logger.warning(
+                "[AlertEngine] Unknown channel '%s' or missing destination — falling back to log.",
+                channel,
+            )
+        # Import inside to avoid circularity if needed, though log should be safe
+        try:
+            log_cls = get_adapter_from_registry("log")
+            return log_cls()
+        except Exception:
+            # Absolute fallback
+            from .adapters.log import LogAlertAdapter
+
+            return LogAlertAdapter()
 
 
 class AlertEngine:

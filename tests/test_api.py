@@ -279,7 +279,7 @@ def test_proxy_gemini_key_missing(client, db_session):
     token = get_token(client, agent)
     response = client.post("/v1/proxy/gemini", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 500, f"Expected 500, got {response.status_code}: {response.text}"
-    assert "Gemini API Key not configured" in response.json()["detail"]
+    assert "API Key for 'gemini' not configured" in response.json()["detail"]
 
 
 def test_proxy_success_mock(client, db_session):
@@ -299,7 +299,7 @@ def test_proxy_success_mock(client, db_session):
     assert db_session.query(AuditLog).filter_by(agent_id=agent.id, response_status=200).count() == 1
 
 
-@patch("agentauth.core.adapters.GeminiAdapter.forward")
+@patch("agentauth.core.adapters.gemini_adapter.GeminiAdapter.forward")
 def test_proxy_success_gemini(mock_forward, client, db_session):
     mock_forward.return_value = {"candidates": [], "status": "ok"}
 

@@ -3,7 +3,6 @@ from typing import Any
 
 import dash
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
 from dash import ALL, Input, Output, State, dcc, html
 from dash.exceptions import PreventUpdate
@@ -20,6 +19,7 @@ from ..core.models import (
     Integration,
     ModelPricing,
 )
+from .widgets import get_registered_widgets
 
 
 # Utils
@@ -309,7 +309,8 @@ def get_top_header():
     )
 
 
-def get_dashboard_view(time_range="24h"):
+def get_dashboard_view(time_range: str = "24h") -> html.Div:
+    """Render the main dashboard using dynamically discovered widgets."""
     db = SessionLocal()
     delta = get_time_delta(time_range)
 
@@ -323,8 +324,16 @@ def get_dashboard_view(time_range="24h"):
     db.close()
 
     if not logs:
-        return html.Div([html.H1("Dashboard"), html.P(f"No data for range '{time_range}'.")])
+        return html.Div(
+            className="animated",
+            children=[
+                html.H1("AI Observability Dashboard"),
+                html.P(f"No data captured for the range '{time_range}'. Check proxy connections."),
+            ],
+        )
 
+    # 2. Build Data Context for Widgets
+    # We include both raw objects and a pandas DataFrame for convenience
     df = pd.DataFrame(
         [
             {
@@ -340,136 +349,24 @@ def get_dashboard_view(time_range="24h"):
         ]
     )
 
-    # 2. Metrics
-    total_reqs = len(df)
-    avg_latency = df["latency"].mean() if not df.empty else 0
-    active_agents_count = len([a for a in agents if not a.is_frozen])
-    total_spend = df["cost"].sum() if not df.empty else 0
+    data = {"logs": logs, "agents": agents, "df": df}
 
-    # 3. Stacked Bar: Error Code Distribution
-    df["hour"] = df["timestamp"].dt.floor("h")
-    error_dist = df.groupby(["hour", "status"]).size().reset_index(name="count")
-    fig_errors = px.bar(
-        error_dist,
-        x="hour",
-        y="count",
-        color="status",
-        template="plotly_white",
-        barmode="stack",
-        color_discrete_map={200: "#10b981", 401: "#f59e0b", 403: "#ef4444", 500: "#b91c1c"},
-    )
-    fig_errors.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        margin={"l": 30, "r": 10, "t": 5, "b": 20},
-        height=180,
-        legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "xanchor": "right", "x": 1},
-    )
-
-    # 4. Latency Heatmap
-    # Group by agent and hour for the heatmap
-    agent_map = {a.id: a.name for a in agents}
-    df["agent_name"] = df["agent_id"].map(agent_map)
-    heatmap_data = df.groupby(["hour", "agent_name"])["latency"].mean().unstack().fillna(0)
-
-    fig_heat = go.Figure(
-        data=go.Heatmap(
-            z=heatmap_data.values.T,
-            x=heatmap_data.index,
-            y=heatmap_data.columns,
-            colorscale="Viridis",
-        )
-    )
-    fig_heat.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        margin={"l": 40, "r": 10, "t": 5, "b": 20},
-        height=180,
-    )
-
-    # 4.5 Spend Distribution: Donut Chart (Premium SaaS Style)
-    spend_by_agent = df.groupby("agent_name")["cost"].sum().reset_index()
-    spend_by_agent = spend_by_agent[spend_by_agent["cost"] > 0]
-
-    # 4.5 Spend Distribution: Horizontal Bar Chart (Fixed Labels)
-    spend_by_agent = df.groupby("agent_name")["cost"].sum().reset_index()
-    spend_by_agent = spend_by_agent[spend_by_agent["cost"] > 0].sort_values("cost", ascending=True)
-
-    if spend_by_agent.empty:
-        fig_spend = go.Figure()
-        fig_spend.add_annotation(
-            text="No spending data yet",
-            showarrow=False,
-            font={"size": 14, "color": "var(--text-muted)"},
-        )
-    else:
-        fig_spend = px.bar(
-            spend_by_agent,
-            x="cost",
-            y="agent_name",
-            orientation="h",
-            template="plotly_white",
-            color="cost",
-            color_continuous_scale="Tealgrn",
-        )
-        fig_spend.update_traces(
-            texttemplate="$%{x:.4f}",
-            textposition="auto",
-            marker_line_width=0,
-            hovertemplate="<b>%{y}</b><br>Spend: $%{x:.4f}",
+    # 3. Resolve and Render Widgets
+    try:
+        widget_classes = get_registered_widgets()
+        # Group widgets to maintain the premium layout structure
+        metric_widgets = [cls().render(data) for cls in widget_classes if cls.group == "metric"]
+        chart_widgets = [cls().render(data) for cls in widget_classes if cls.group == "chart"]
+        card_widgets = [cls().render(data) for cls in widget_classes if cls.group == "card"]
+    except Exception as exc:
+        return html.Div(
+            [
+                html.H1("Dashboard Error"),
+                html.P("Failed to load modular widgets:"),
+                html.Pre(str(exc)),
+            ]
         )
 
-    fig_spend.update_layout(
-        margin={"l": 10, "r": 40, "t": 10, "b": 10},
-        height=180,
-        showlegend=False,
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        xaxis={"showgrid": False, "zeroline": False, "showticklabels": False},
-        yaxis={
-            "showgrid": False,
-            "zeroline": False,
-            "title": None,
-            "tickfont": {"size": 11, "color": "var(--text-main)", "weight": "bold"},
-        },
-        coloraxis_showscale=False,
-    )
-
-    # 5. Agent Status Table
-    agent_rows = []
-    for agent in agents[:10]:
-        agent_logs = [entry for entry in logs if entry.agent_id == agent.id]
-        total_a_reqs = len(agent_logs)
-        a_errors = len([entry for entry in agent_logs if entry.response_status >= 400])
-        err_rate = (a_errors / total_a_reqs * 100) if total_a_reqs > 0 else 0
-
-        status_class = "status-active" if not agent.is_frozen else "status-error"
-        status_dot = "dot-active" if not agent.is_frozen else "dot-error"
-        status_text = "Active" if not agent.is_frozen else "Frozen"
-
-        agent_rows.append(
-            html.Tr(
-                id={"type": "agent-row", "index": agent.id},
-                n_clicks=0,
-                className="clickable-row",
-                children=[
-                    html.Td(str(agent.name), style={"fontWeight": "600"}),
-                    html.Td("v1.5-flash", style={"color": "var(--text-muted)"}),
-                    html.Td("US-East", style={"color": "var(--text-muted)"}),
-                    html.Td(
-                        html.Div(
-                            className=f"status-pill {status_class}",
-                            children=[html.Div(className=f"status-dot {status_dot}"), status_text],
-                        )
-                    ),
-                    html.Td(f"{total_a_reqs:,}"),
-                    html.Td(
-                        f"{err_rate:.1f}%",
-                        style={"color": "var(--danger)" if err_rate > 5 else "inherit"},
-                    ),
-                ],
-            )
-        )
     return html.Div(
         className="animated",
         children=[
@@ -484,128 +381,12 @@ def get_dashboard_view(time_range="24h"):
                     html.H1("AI Observability Dashboard", style={"margin": "0"}),
                 ],
             ),
-            # Metrics Grid
-            html.Div(
-                className="metrics-grid",
-                children=[
-                    html.Div(
-                        className="metric-card",
-                        children=[
-                            html.Span("Total Requests", className="metric-label"),
-                            html.Div(
-                                className="metric-value",
-                                children=[
-                                    f"{total_reqs:,}",
-                                    html.Span(
-                                        "↗ 5%",
-                                        className="metric-trend",
-                                        style={"color": "var(--success)"},
-                                    ),
-                                ],
-                            ),
-                        ],
-                    ),
-                    html.Div(
-                        className="metric-card",
-                        children=[
-                            html.Span("Average Latency", className="metric-label"),
-                            html.Div(
-                                className="metric-value",
-                                children=[
-                                    f"{int(avg_latency)}ms",
-                                    html.Span(
-                                        "↘ 2%",
-                                        className="metric-trend",
-                                        style={"color": "var(--success)"},
-                                    ),
-                                ],
-                            ),
-                        ],
-                    ),
-                    html.Div(
-                        className="metric-card",
-                        children=[
-                            html.Span("Active Agents", className="metric-label"),
-                            html.Div(
-                                className="metric-value",
-                                children=f"{active_agents_count}/{len(agents)}",
-                            ),
-                        ],
-                    ),
-                    html.Div(
-                        className="metric-card",
-                        children=[
-                            html.Span("Total Monthly Spend", className="metric-label"),
-                            html.Div(
-                                className="metric-value",
-                                children=[
-                                    f"${total_spend:.2f}",
-                                    html.Span(
-                                        "↑ 8%",
-                                        className="metric-trend",
-                                        style={"color": "var(--danger)"},
-                                    ),
-                                ],
-                            ),
-                        ],
-                    ),
-                ],
-            ),
-            # Charts Row 1: Spend & Errors
-            html.Div(
-                className="chart-row",
-                style={"marginBottom": "20px"},
-                children=[
-                    html.Div(
-                        className="card",
-                        children=[
-                            html.H3("Spend Distribution ($)"),
-                            dcc.Graph(figure=fig_spend, config={"displayModeBar": False}),
-                        ],
-                    ),
-                    html.Div(
-                        className="card",
-                        children=[
-                            html.H3("Error Code Distribution"),
-                            dcc.Graph(figure=fig_errors, config={"displayModeBar": False}),
-                        ],
-                    ),
-                ],
-            ),
-            # Charts Row 2: Latency Heatmap
-            html.Div(
-                className="card",
-                style={"marginBottom": "20px"},
-                children=[
-                    html.H3("Global Request Latency (Heatmap)"),
-                    dcc.Graph(figure=fig_heat, config={"displayModeBar": False}),
-                ],
-            ),
-            # Status Table
-            html.Div(
-                className="card",
-                children=[
-                    html.H3("AI Agents Status & Performance"),
-                    html.Table(
-                        className="enterprise-table",
-                        children=[
-                            html.Thead(
-                                html.Tr(
-                                    [
-                                        html.Th("Agent Name"),
-                                        html.Th("Model"),
-                                        html.Th("Region"),
-                                        html.Th("Status"),
-                                        html.Th("Requests"),
-                                        html.Th("Error Rate"),
-                                    ]
-                                )
-                            ),
-                            html.Tbody(agent_rows),
-                        ],
-                    ),
-                ],
-            ),
+            # Metrics Row (Top grid)
+            html.Div(className="metrics-grid", children=metric_widgets),
+            # Charts Row (Middle section)
+            html.Div(className="chart-row", style={"marginBottom": "20px"}, children=chart_widgets),
+            # Main Cards (Bottom section: Heatmaps, tables, etc.)
+            html.Div(children=card_widgets),
         ],
     )
 
