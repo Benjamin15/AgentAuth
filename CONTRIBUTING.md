@@ -11,7 +11,7 @@ Before creating bug reports, please check the existing issues to see if the prob
 Enhancement suggestions are tracked as GitHub issues. When creating an enhancement suggestion, please provide a clear and descriptive title and a small summary of why this enhancement would be useful.
 
 ### Pull Requests
-1. Fork the repo and create your branch from `main`.
+1. Fork the repo and create your branch from `master`.
 2. If you've added code that should be tested, add tests.
 3. If you've changed APIs, update the documentation.
 4. Ensure the test suite passes.
@@ -50,17 +50,25 @@ pre-commit install
 
 ## Running Quality Gates
 
-Before submitting a PR, please run:
+Before submitting a PR, please run the following quality gates. **Passing these checks is mandatory for all contributions.**
+
+### Human Contributors
 ```bash
-# Formatting & Linting
+# Automated cleanup, linting, and formatting
 ruff check . --fix
 ruff format .
 
 # Type Checking
 mypy agentauth
 
-# Tests
+# Tests & Coverage
 pytest --cov=agentauth
 ```
+
+### AI Agent Contributors
+AI coding assistants should use the workspace workflow rules defined in `.agent/rules/quality_gates.md`. The easiest way is to run:
+- `/run-quality-gates`
+
+All commit include a confirmation that these gates are successfully completed.
 
 Thank you for contributing!
