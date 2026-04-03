@@ -159,6 +159,5 @@ agentauth.db
 agentauth.db-journal
 .agentauth_master.key
 .env
-.agent/
 logs/
 *.log
