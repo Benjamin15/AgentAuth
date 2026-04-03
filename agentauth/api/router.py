@@ -14,6 +14,7 @@ from ..core.adapters import get_adapter
 from ..core.database import SessionLocal
 from ..core.models import Agent, AgentPermission, AgentToken, AuditLog, Integration, ModelPricing
 from ..core.security import decrypt_secret, encrypt_secret
+from ..core.utils import mask_sensitive_data
 from .schemas import AgentCreate, AgentRead, TokenResponse
 
 # Cache for authentication: (token, integration_name) -> (agent_id, is_frozen, has_permission)
@@ -173,6 +174,7 @@ async def proxy_request(
     latency_ms = int((end_time - start_time) * 1000)
 
     # 5. Log request
+    masked_body = mask_sensitive_data(body)
     status_code = 200 if "error" not in response else 400
     usage = response.get("usage", {})
 
@@ -196,7 +198,7 @@ async def proxy_request(
     log = AuditLog(
         agent_id=agent.id,
         target_service=integration_name,
-        request_details=str(body),
+        request_details=str(masked_body),
         response_status=status_code,
         prompt_tokens=p_tokens,
         completion_tokens=c_tokens,
@@ -207,10 +209,9 @@ async def proxy_request(
     db.add(log)
     db.commit()
 
-    # Evaluate budget alert rules in the background (fire-and-forget).
-    # A new DB session is NOT needed here because the commit above has already
-    # persisted the latest cost data; the engine re-queries inside its own call.
-    asyncio.create_task(AlertEngine.evaluate(agent, db))
+    # Evaluate budget alert rules in the background safely.
+    # Pass agent_id and NO session so the engine creates a fresh one.
+    asyncio.create_task(AlertEngine.evaluate(agent.id))
 
     # If the response was wrapped by the adapter (e.g. Gemini), return the 'data' part
     return response.get("data", response)

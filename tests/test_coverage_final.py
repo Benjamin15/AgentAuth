@@ -169,7 +169,7 @@ async def test_alert_engine_complete_coverage(db_session):
     db_session.commit()
 
     # Run evaluation
-    await AlertEngine.evaluate(agent, db_session)
+    await AlertEngine.evaluate(int(agent.id), db_session)
 
     # Verify AlertEvent created (Line 172-180)
     event = db_session.query(AlertEvent).filter_by(agent_id=agent.id).first()
@@ -178,7 +178,7 @@ async def test_alert_engine_complete_coverage(db_session):
 
     # 3. Test Deduplication (Line 136-137)
     # Running again should NOT create a new event
-    await AlertEngine.evaluate(agent, db_session)
+    await AlertEngine.evaluate(int(agent.id), db_session)
     assert db_session.query(AlertEvent).filter_by(agent_id=agent.id).count() == 1
 
 

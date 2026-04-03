@@ -2,8 +2,8 @@
 
 The engine is the sole integration point between the proxy and the alerting
 subsystem.  Call :func:`AlertEngine.evaluate` once per proxied request
-(ideally as a fire-and-forget async task) and let it handle rule matching,
-deduplication, adapter selection, and event persistence.
+(ideally as a fire-and-forget async task) for a given agent_id and let it
+handle rule matching, deduplication, adapter selection, and event persistence.
 """
 
 import asyncio
@@ -11,8 +11,10 @@ import datetime
 import logging
 from typing import Optional
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from ..core.database import SessionLocal
 from ..core.models import Agent, AlertEvent, AlertRule, AuditLog
 from .adapters import get_adapter as get_adapter_from_registry
 from .base import AlertPayload, BaseAlertAdapter
@@ -71,8 +73,11 @@ class AlertEngine:
     """
 
     @staticmethod
-    async def evaluate(agent: Agent, db: Session) -> None:
+    async def evaluate(agent_id: int, db: Optional[Session] = None) -> None:
         """Evaluate all active rules for *agent* and dispatch any new alerts.
+
+        If *db* is not provided, a new session is created. This is preferred
+        when calling from a background task to avoid closed session errors.
 
         An alert is dispatched only once per calendar month per (rule, threshold)
         pair — the engine checks whether an ``AlertEvent`` already exists for
@@ -80,15 +85,24 @@ class AlertEngine:
 
         Args:
         ----
-            agent: The :class:`~agentauth.core.models.Agent` whose spend is
+            agent_id: The ID of the :class:`~agentauth.core.models.Agent` whose spend is
                 being evaluated.
             db: An active SQLAlchemy :class:`~sqlalchemy.orm.Session`.
 
         """
+        internal_db = db or SessionLocal()
         try:
-            await AlertEngine._run(agent, db)
+            agent = internal_db.get(Agent, agent_id)
+            if not agent:
+                logger.error("[AlertEngine] Agent #%s not found during evaluation", agent_id)
+                return
+
+            await AlertEngine._run(agent, internal_db)
         except Exception as exc:  # noqa: BLE001
             logger.error("[AlertEngine] Unexpected error during evaluation: %s", exc)
+        finally:
+            if db is None:
+                internal_db.close()
 
     @staticmethod
     async def _run(agent: Agent, db: Session) -> None:
@@ -96,19 +110,18 @@ class AlertEngine:
         if agent.monthly_budget_usd is None or agent.monthly_budget_usd <= 0:
             return  # No budget configured — nothing to alert on.
 
-        # ---- 1. Calculate current monthly spend ----
+        # ---- 1. Calculate current monthly spend using SQL SUM ----
         first_of_month = (
             datetime.datetime.now(datetime.timezone.utc)
             .replace(tzinfo=None)
             .replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         )
-        logs = (
-            db.query(AuditLog)
+        total_spent_query = (
+            db.query(func.sum(AuditLog.cost_usd))
             .filter(AuditLog.agent_id == agent.id, AuditLog.timestamp >= first_of_month)
-            .with_entities(AuditLog.cost_usd)
-            .all()
+            .scalar()
         )
-        current_spend = sum(float(row.cost_usd or 0) for row in logs)
+        current_spend = float(total_spent_query or 0.0)
         current_pct = (current_spend / agent.monthly_budget_usd) * 100
 
         # ---- 2. Fetch active rules for this agent (agent-specific + global) ----
@@ -166,16 +179,27 @@ class AlertEngine:
     ) -> None:
         """Deliver the alert via the configured adapter and persist the event.
 
-        Args:
-        ----
-            rule: The :class:`~agentauth.core.models.AlertRule` being fired.
-            payload: Pre-built alert payload.
-            agent_id: ID of the agent the alert is scoped to.
-            db: Active database session.
-
+        Includes a simple retry mechanism for transient network errors.
         """
         adapter = get_adapter(str(rule.channel), rule.destination)  # type: ignore[arg-type]
-        delivered = await adapter.send(payload)
+
+        delivered = False
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                delivered = await adapter.send(payload)
+                if delivered:
+                    break
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "[AlertEngine] Alert delivery attempt %d failed for Rule #%s: %s",
+                    attempt + 1,
+                    rule.id,
+                    exc,
+                )
+
+            if attempt < max_retries - 1:
+                await asyncio.sleep(1 * (attempt + 1))  # Exponential backoff (1s, 2s)
 
         event = AlertEvent(
             rule_id=rule.id,

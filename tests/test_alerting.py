@@ -176,7 +176,7 @@ async def test_engine_no_budget(db_session):
     db_session.add(agent)
     db_session.commit()
 
-    await AlertEngine.evaluate(agent, db_session)
+    await AlertEngine.evaluate(int(agent.id), db_session)
     assert db_session.query(AlertEvent).count() == 0
 
 
@@ -193,7 +193,7 @@ async def test_engine_below_threshold(db_session):
     )
     db_session.commit()
 
-    await AlertEngine.evaluate(agent, db_session)
+    await AlertEngine.evaluate(int(agent.id), db_session)
     assert db_session.query(AlertEvent).count() == 0
 
 
@@ -214,7 +214,7 @@ async def test_engine_fires_at_threshold(db_session):
     with patch(
         "agentauth.alerting.adapters.log.LogAlertAdapter.send", return_value=True
     ) as mock_send:
-        await AlertEngine.evaluate(agent, db_session)
+        await AlertEngine.evaluate(int(agent.id), db_session)
         mock_send.assert_called_once()
 
     events = db_session.query(AlertEvent).all()
@@ -252,7 +252,7 @@ async def test_engine_deduplicates_within_month(db_session):
     db_session.commit()
 
     with patch("agentauth.alerting.adapters.log.LogAlertAdapter.send") as mock_send:
-        await AlertEngine.evaluate(agent, db_session)
+        await AlertEngine.evaluate(int(agent.id), db_session)
         mock_send.assert_not_called()
 
     assert db_session.query(AlertEvent).count() == 1  # No new event created
@@ -272,7 +272,7 @@ async def test_engine_global_rule_applies_to_all_agents(db_session):
     db_session.commit()
 
     with patch("agentauth.alerting.adapters.log.LogAlertAdapter.send", return_value=True):
-        await AlertEngine.evaluate(agent, db_session)
+        await AlertEngine.evaluate(int(agent.id), db_session)
 
     assert db_session.query(AlertEvent).count() == 1
 
@@ -284,7 +284,7 @@ async def test_engine_evaluate_catches_exception(caplog, db_session):
     db_session.commit()
     with patch("agentauth.alerting.engine.AlertEngine._run", side_effect=ValueError("Test error")):
         with caplog.at_level(logging.ERROR, logger="agentauth.alerts"):
-            await AlertEngine.evaluate(agent, db_session)
+            await AlertEngine.evaluate(int(agent.id), db_session)
     assert "Unexpected error during evaluation" in caplog.text
 
 
@@ -300,5 +300,5 @@ async def test_engine_returns_early_no_rules_for_agent(db_session):
 
     # No AlertRule added!
     with patch("agentauth.alerting.engine.asyncio.gather") as mock_gather:
-        await AlertEngine.evaluate(agent, db_session)
+        await AlertEngine.evaluate(int(agent.id), db_session)
         mock_gather.assert_not_called()
